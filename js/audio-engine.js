@@ -28,6 +28,9 @@ export class AudioEngine {
     this.bass = null;
     this.lead = null;
     this.initialized = false;
+    this.schedulerStats = this.#newSchedulerStats();
+    this.lastSchedulerWallTime = null;
+    this.lastStatsReport = 0;
     this.patterns = [
       {
         name: "First Light", bpm: 110,
@@ -69,6 +72,9 @@ export class AudioEngine {
       this.started = true;
       this.step = 0;
       this.nextNoteTime = this.context.currentTime + 0.08;
+      this.schedulerStats = this.#newSchedulerStats();
+      this.lastSchedulerWallTime = null;
+      this.lastStatsReport = performance.now();
       this.#startScheduler();
       this.onState("playing");
       this.onLog(`Tone.js sequencer started: ${this.patterns[this.pattern].name}, ${this.patterns[this.pattern].bpm} BPM.`);
@@ -217,8 +223,23 @@ export class AudioEngine {
     if (this.schedulerWorker) this.schedulerWorker.postMessage("stop");
   }
 
+  #newSchedulerStats() {
+    return { ticks: 0, delayedTicks: 0, maxTickGapMs: 0, scheduledSteps: 0,
+      scheduledNotes: 0, lateNotes: 0, maxLateMs: 0, maxScheduleWorkMs: 0 };
+  }
+
   #schedulerTick() {
     if (!this.started || !this.context || this.context.state !== "running") return;
+    const wallNow = performance.now();
+    const stats = this.schedulerStats;
+    if (this.lastSchedulerWallTime !== null) {
+      const gap = wallNow - this.lastSchedulerWallTime;
+      stats.maxTickGapMs = Math.max(stats.maxTickGapMs, gap);
+      if (gap > 100) stats.delayedTicks++;
+    }
+    this.lastSchedulerWallTime = wallNow;
+    stats.ticks++;
+
     const now = this.context.currentTime;
     if (this.nextNoteTime < now - 0.5) {
       const lateBy = Math.round((now - this.nextNoteTime) * 1000);
@@ -227,19 +248,36 @@ export class AudioEngine {
     }
     const pattern = this.patterns[this.pattern];
     const stepDuration = 60 / pattern.bpm / 4;
+    const workStart = performance.now();
     while (this.nextNoteTime < now + this.lookAhead) {
-      this.#scheduleStep(this.step, this.nextNoteTime, pattern);
+      const lateness = now - this.nextNoteTime;
+      if (lateness > 0) {
+        stats.lateNotes++;
+        stats.maxLateMs = Math.max(stats.maxLateMs, lateness * 1000);
+      }
+      stats.scheduledNotes += this.#scheduleStep(this.step, this.nextNoteTime, pattern);
+      stats.scheduledSteps++;
       this.nextNoteTime += stepDuration;
       this.step = (this.step + 1) % 16;
+    }
+    stats.maxScheduleWorkMs = Math.max(stats.maxScheduleWorkMs, performance.now() - workStart);
+
+    if (wallNow - this.lastStatsReport >= 10000) {
+      const summary = `Scheduler 10s: ${stats.ticks} ticks; ${stats.delayedTicks} gaps >100ms; max gap ${Math.round(stats.maxTickGapMs)}ms; ${stats.scheduledSteps} steps/${stats.scheduledNotes} notes; ${stats.lateNotes} late notes (max ${stats.maxLateMs.toFixed(1)}ms); max scheduling work ${stats.maxScheduleWorkMs.toFixed(2)}ms.`;
+      this.onLog(summary);
+      this.schedulerStats = this.#newSchedulerStats();
+      this.lastStatsReport = wallNow;
     }
   }
 
   #scheduleStep(step, time, pattern) {
-    if (pattern.kick[step]) this.kick.triggerAttackRelease("C1", "8n", time, 0.9);
-    if (pattern.snare[step]) this.snare.triggerAttackRelease(0.13, time, 0.72);
-    if (pattern.hat[step]) this.hat.triggerAttackRelease(0.045, time, 0.48);
-    if (pattern.bass[step]) this.bass.triggerAttackRelease(pattern.bass[step], 0.19, time, 0.68);
-    if (pattern.lead[step]) this.lead.triggerAttackRelease(pattern.lead[step], 0.14, time, 0.58);
+    let count = 0;
+    if (pattern.kick[step]) { this.kick.triggerAttackRelease("C1", "8n", time, 0.9); count++; }
+    if (pattern.snare[step]) { this.snare.triggerAttackRelease(0.13, time, 0.72); count++; }
+    if (pattern.hat[step]) { this.hat.triggerAttackRelease(0.045, time, 0.48); count++; }
+    if (pattern.bass[step]) { this.bass.triggerAttackRelease(pattern.bass[step], 0.19, time, 0.68); count++; }
+    if (pattern.lead[step]) { this.lead.triggerAttackRelease(pattern.lead[step], 0.14, time, 0.58); count++; }
+    return count;
   }
 
   async pause() {
