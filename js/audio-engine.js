@@ -27,6 +27,7 @@ export class AudioEngine {
     this.hatFilter = null;
     this.bass = null;
     this.lead = null;
+    this.initialized = false;
     this.patterns = [
       {
         name: "First Light", bpm: 110,
@@ -60,7 +61,7 @@ export class AudioEngine {
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
     if (!AudioContextClass) throw new Error("Web Audio is not supported in this browser.");
     this.#prepareMediaElement();
-    if (!this.context) this.#build(AudioContextClass);
+    if (!this.initialized) this.#build(AudioContextClass);
     try {
       if (this.context.state !== "running") await this.context.resume();
       await this.Tone.start();
@@ -76,6 +77,7 @@ export class AudioEngine {
       this.started = false;
       this.#stopScheduler();
       if (this.context?.state === "running") await this.context.suspend();
+      if (!this.initialized) await this.#resetFailedBuild();
       throw error;
     }
   }
@@ -121,7 +123,8 @@ export class AudioEngine {
     this.toneOutput = new this.Tone.Volume(8);
     this.compressor = new this.Tone.Compressor({ threshold: -18, ratio: 3, attack: 0.004, release: 0.16 });
     this.limiter = new this.Tone.Limiter(-1);
-    this.toneOutput.chain(this.compressor, this.limiter, this.Tone.Destination);
+    this.toneOutput.chain(this.compressor, this.limiter);
+    this.limiter.toDestination();
 
     this.kick = new this.Tone.MembraneSynth({
       pitchDecay: 0.045, octaves: 5, oscillator: { type: "sine" },
@@ -161,7 +164,25 @@ export class AudioEngine {
     const baseLatency = Number.isFinite(ctx.baseLatency) ? `${Math.round(ctx.baseLatency * 1000)} ms` : "unavailable";
     const outputLatency = Number.isFinite(ctx.outputLatency) ? `${Math.round(ctx.outputLatency * 1000)} ms` : "unavailable";
     this.onLog(`Tone.js ${this.Tone.version || "loaded"}; sampleRate=${ctx.sampleRate}; baseLatency=${baseLatency}; outputLatency=${outputLatency}.`);
+    this.initialized = true;
     this.onLog("Tone.js instruments ready; compressor and -1 dB limiter enabled.");
+  }
+
+  async #resetFailedBuild() {
+    for (const node of [this.kick, this.snare, this.hat, this.snareFilter, this.hatFilter, this.bass, this.lead, this.toneOutput, this.compressor, this.limiter]) {
+      try { node?.dispose(); } catch {}
+    }
+    const failedContext = this.context;
+    this.context = null;
+    this.master = null;
+    this.Tone = null;
+    this.toneOutput = this.compressor = this.limiter = null;
+    this.kick = this.snare = this.hat = this.snareFilter = this.hatFilter = null;
+    this.bass = this.lead = null;
+    this.initialized = false;
+    if (failedContext && failedContext.state !== "closed") {
+      try { await failedContext.close(); } catch {}
+    }
   }
 
   #startScheduler() {
