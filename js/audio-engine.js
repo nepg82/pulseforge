@@ -1,7 +1,7 @@
 /**
- * PulseForge audio engine — Media Session test build.
- * A quiet, looping media resource feeds Web Audio. This gives Android a real
- * HTMLMediaElement playback session while the generated synth is mixed in Web Audio.
+ * PulseForge audio engine — first sequenced-generation prototype.
+ * A quiet looping media element keeps Android's media session alive; the
+ * sequenced Web Audio instruments are mixed into the same output.
  */
 export class AudioEngine {
   constructor({ onState = () => {}, onLog = () => {} } = {}) {
@@ -11,10 +11,41 @@ export class AudioEngine {
     this.mediaElement = null;
     this.mediaSource = null;
     this.keepAliveUrl = null;
-    this.nodes = [];
+    this.master = null;
+    this.noiseBuffer = null;
     this.started = false;
     this.pattern = 0;
-    this.master = null;
+    this.step = 0;
+    this.nextNoteTime = 0;
+    this.schedulerTimer = null;
+    this.lookAhead = 0.12;
+    this.schedulerInterval = 25;
+    this.patterns = [
+      {
+        name: "First Light", bpm: 110,
+        kick: [1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0],
+        snare:[0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0],
+        hat:  [1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0],
+        bass: [55,null,55,null,82.4,null,55,null,73.4,null,55,null,98,null,82.4,null],
+        lead: [220,null,261.6,null,329.6,null,261.6,null,392,null,329.6,null,261.6,null,220,null]
+      },
+      {
+        name: "Blue Current", bpm: 118,
+        kick: [1,0,0,1,0,0,1,0,1,0,0,1,0,0,1,0],
+        snare:[0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0],
+        hat:  [1,0,1,1,1,0,1,0,1,0,1,1,1,0,1,0],
+        bass: [65.4,null,65.4,98,null,65.4,null,82.4,65.4,null,65.4,110,null,82.4,null,98],
+        lead: [261.6,null,329.6,392,null,329.6,261.6,null,392,null,440,392,null,329.6,261.6,null]
+      },
+      {
+        name: "Night Signal", bpm: 100,
+        kick: [1,0,0,0,0,0,1,0,1,0,0,0,0,0,1,0],
+        snare:[0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0],
+        hat:  [1,0,0,1,0,0,1,0,1,0,0,1,0,0,1,0],
+        bass: [49,null,null,73.4,null,49,98,null,49,null,null,65.4,null,49,82.4,null],
+        lead: [196,null,246.9,null,293.7,null,246.9,null,392,null,293.7,null,246.9,null,220,null]
+      }
+    ];
   }
 
   async start(mediaElement) {
@@ -29,11 +60,15 @@ export class AudioEngine {
       if (this.context.state !== "running") await this.context.resume();
       await this.mediaElement.play();
       this.started = true;
+      this.step = 0;
+      this.nextNoteTime = this.context.currentTime + 0.05;
+      this.#startScheduler();
       this.onState("playing");
-      this.onLog(`Playback started; context=${this.context.state}; sampleRate=${this.context.sampleRate}`);
+      this.onLog(`Sequencer started: ${this.patterns[this.pattern].name}, ${this.patterns[this.pattern].bpm} BPM.`);
       return this.getInfo();
     } catch (error) {
       this.started = false;
+      this.#stopScheduler();
       if (this.context?.state === "running") await this.context.suspend();
       throw error;
     }
@@ -52,8 +87,6 @@ export class AudioEngine {
   }
 
   #makeQuietLoop() {
-    // 20 seconds at 8 kHz; an extremely low 20 Hz tone avoids a zero-data
-    // resource while remaining effectively inaudible. The loop is phase-aligned.
     const sampleRate = 8000;
     const seconds = 20;
     const sampleCount = sampleRate * seconds;
@@ -84,72 +117,122 @@ export class AudioEngine {
   #build(AudioContextClass) {
     const ctx = new AudioContextClass();
     const master = ctx.createGain();
-    master.gain.value = 0.18;
+    master.gain.value = 0.42;
     master.connect(ctx.destination);
 
-    // The media element is the input to Web Audio (not the output). This is
-    // important for Chrome on Android to request normal media audio focus.
     this.mediaSource = ctx.createMediaElementSource(this.mediaElement);
     this.mediaSource.connect(master);
-
-    const bass = ctx.createOscillator();
-    bass.type = "sawtooth";
-    bass.frequency.value = 55;
-    const bassFilter = ctx.createBiquadFilter();
-    bassFilter.type = "lowpass";
-    bassFilter.frequency.value = 145;
-    bassFilter.Q.value = 1.1;
-    const bassGain = ctx.createGain();
-    bassGain.gain.value = 0.34;
-    bass.connect(bassFilter).connect(bassGain).connect(master);
-    bass.start();
-
-    const lead = ctx.createOscillator();
-    lead.type = "triangle";
-    lead.frequency.value = 110;
-    const leadFilter = ctx.createBiquadFilter();
-    leadFilter.type = "lowpass";
-    leadFilter.frequency.value = 520;
-    const leadGain = ctx.createGain();
-    leadGain.gain.value = 0.13;
-    lead.connect(leadFilter).connect(leadGain).connect(master);
-    lead.start();
-
-    const lfo = ctx.createOscillator();
-    lfo.type = "sine";
-    lfo.frequency.value = 0.22;
-    const lfoGain = ctx.createGain();
-    lfoGain.gain.value = 190;
-    lfo.connect(lfoGain).connect(leadFilter.frequency);
-    lfo.start();
-
-    const ampLfo = ctx.createOscillator();
-    ampLfo.type = "sine";
-    ampLfo.frequency.value = 0.72;
-    const ampDepth = ctx.createGain();
-    ampDepth.gain.value = 0.045;
-    ampLfo.connect(ampDepth).connect(master.gain);
-    ampLfo.start();
+    this.noiseBuffer = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+    const noise = this.noiseBuffer.getChannelData(0);
+    for (let i = 0; i < noise.length; i++) noise[i] = Math.random() * 2 - 1;
 
     this.context = ctx;
     this.master = master;
-    this.nodes = [bass, bassFilter, bassGain, lead, leadFilter, leadGain, lfo, lfoGain, ampLfo, ampDepth];
     ctx.onstatechange = () => {
       this.onLog(`AudioContext state: ${ctx.state}`);
       if (ctx.state === "suspended" && this.started) this.onState("interrupted");
     };
-    this.onLog("Audio graph created; HTMLAudioElement feeds Web Audio destination.");
+    const baseLatency = Number.isFinite(ctx.baseLatency) ? `${Math.round(ctx.baseLatency * 1000)} ms` : "unavailable";
+    const outputLatency = Number.isFinite(ctx.outputLatency) ? `${Math.round(ctx.outputLatency * 1000)} ms` : "unavailable";
+    this.onLog(`Audio graph ready; sampleRate=${ctx.sampleRate}; baseLatency=${baseLatency}; outputLatency=${outputLatency}.`);
+    this.onLog("Sequenced synth uses a stronger midrange mix for small and bone-conduction headphones.");
+  }
+
+  #startScheduler() {
+    this.#stopScheduler();
+    this.schedulerTimer = window.setInterval(() => this.#schedulerTick(), this.schedulerInterval);
+    this.#schedulerTick();
+  }
+
+  #stopScheduler() {
+    if (this.schedulerTimer !== null) window.clearInterval(this.schedulerTimer);
+    this.schedulerTimer = null;
+  }
+
+  #schedulerTick() {
+    if (!this.started || !this.context || this.context.state !== "running") return;
+    const now = this.context.currentTime;
+    if (this.nextNoteTime < now - 0.15) {
+      this.onLog("Scheduler recovered from a late tick; skipped stale steps to avoid a burst.");
+      this.nextNoteTime = now + 0.03;
+    }
+    const pattern = this.patterns[this.pattern];
+    const stepDuration = 60 / pattern.bpm / 4;
+    while (this.nextNoteTime < now + this.lookAhead) {
+      this.#scheduleStep(this.step, this.nextNoteTime, pattern);
+      this.nextNoteTime += stepDuration;
+      this.step = (this.step + 1) % 16;
+    }
+  }
+
+  #scheduleStep(step, time, pattern) {
+    if (pattern.kick[step]) this.#kick(time);
+    if (pattern.snare[step]) this.#noiseHit(time, 0.12, 1800, 0.13);
+    if (pattern.hat[step]) this.#noiseHit(time, 0.045, 7800, 0.045);
+    const bassNote = pattern.bass[step];
+    if (bassNote) this.#tone(time, bassNote, 0.19, "sawtooth", 620, 0.13);
+    const leadNote = pattern.lead[step];
+    if (leadNote) this.#tone(time, leadNote, 0.14, "triangle", 1900, 0.075);
+  }
+
+  #kick(time) {
+    const ctx = this.context;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(135, time);
+    osc.frequency.exponentialRampToValueAtTime(48, time + 0.13);
+    gain.gain.setValueAtTime(0.72, time);
+    gain.gain.exponentialRampToValueAtTime(0.001, time + 0.28);
+    osc.connect(gain).connect(this.master);
+    osc.start(time);
+    osc.stop(time + 0.29);
+  }
+
+  #tone(time, frequency, duration, type, cutoff, peak) {
+    const ctx = this.context;
+    const osc = ctx.createOscillator();
+    const filter = ctx.createBiquadFilter();
+    const gain = ctx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(frequency, time);
+    filter.type = "lowpass";
+    filter.frequency.setValueAtTime(cutoff, time);
+    gain.gain.setValueAtTime(0.001, time);
+    gain.gain.linearRampToValueAtTime(peak, time + 0.012);
+    gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
+    osc.connect(filter).connect(gain).connect(this.master);
+    osc.start(time);
+    osc.stop(time + duration + 0.015);
+  }
+
+  #noiseHit(time, duration, cutoff, peak) {
+    const ctx = this.context;
+    const source = ctx.createBufferSource();
+    const filter = ctx.createBiquadFilter();
+    const gain = ctx.createGain();
+    source.buffer = this.noiseBuffer;
+    filter.type = "highpass";
+    filter.frequency.setValueAtTime(cutoff, time);
+    gain.gain.setValueAtTime(0.001, time);
+    gain.gain.linearRampToValueAtTime(peak, time + 0.004);
+    gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
+    source.connect(filter).connect(gain).connect(this.master);
+    source.start(time);
+    source.stop(time + duration + 0.01);
   }
 
   async pause() {
     this.started = false;
+    this.#stopScheduler();
     if (this.mediaElement && !this.mediaElement.paused) this.mediaElement.pause();
     if (this.context?.state === "running") await this.context.suspend();
-    this.onLog("Playback paused.");
+    this.onLog("Playback paused; sequencer clock suspended.");
   }
 
   async suspendForInterruption() {
     this.started = false;
+    this.#stopScheduler();
     if (this.mediaElement && !this.mediaElement.paused) this.mediaElement.pause();
     if (this.context?.state === "running") await this.context.suspend();
     this.onLog("Audio engine suspended after an external interruption.");
@@ -160,23 +243,15 @@ export class AudioEngine {
     if (this.mediaElement) {
       try { this.mediaElement.currentTime = 0; } catch {}
     }
+    this.step = 0;
     this.onLog("Playback stopped; audio graph kept ready for the next start.");
   }
 
   async changePattern(direction = 1) {
-    this.pattern = (this.pattern + direction + 3) % 3;
-    if (!this.context || !this.master) return this.pattern;
-    const settings = [
-      { bass: 55, lead: 110, filter: 520, level: 0.18 },
-      { bass: 65.4, lead: 130.8, filter: 760, level: 0.16 },
-      { bass: 49, lead: 98, filter: 390, level: 0.20 }
-    ][this.pattern];
-    const now = this.context.currentTime;
-    this.nodes[0].frequency.setTargetAtTime(settings.bass, now, 0.18);
-    this.nodes[3].frequency.setTargetAtTime(settings.lead, now, 0.18);
-    this.nodes[4].frequency.setTargetAtTime(settings.filter, now, 0.25);
-    this.master.gain.setTargetAtTime(settings.level, now, 0.2);
-    this.onLog(`Pattern changed to ${this.pattern + 1}.`);
+    this.pattern = (this.pattern + direction + this.patterns.length) % this.patterns.length;
+    this.step = 0;
+    if (this.context && this.started) this.nextNoteTime = this.context.currentTime + 0.04;
+    this.onLog(`Pattern changed to ${this.patterns[this.pattern].name} (${this.patterns[this.pattern].bpm} BPM).`);
     return this.pattern;
   }
 
@@ -185,7 +260,8 @@ export class AudioEngine {
       contextState: this.context?.state ?? "not created",
       sampleRate: this.context?.sampleRate ?? null,
       outputConnected: Boolean(this.master),
-      pattern: this.pattern + 1
+      pattern: this.pattern + 1,
+      bpm: this.patterns[this.pattern].bpm
     };
   }
 }

@@ -92,6 +92,33 @@ $("clear-log").addEventListener("click", () => {
   log("Log cleared.");
 });
 
+$("build-refresh").addEventListener("click", async () => {
+  const button = $("build-refresh");
+  button.disabled = true;
+  button.textContent = "RELOADING";
+  log("Manual server refresh requested; unregistering PulseForge service worker and clearing its shell cache.");
+  try {
+    if ("serviceWorker" in navigator) {
+      const registration = await navigator.serviceWorker.getRegistration();
+      if (registration) {
+        const removed = await registration.unregister();
+        log(`Service worker unregistered: ${removed}.`);
+      }
+    }
+    if ("caches" in window) {
+      const keys = await caches.keys();
+      const appCaches = keys.filter(key => key.startsWith("pulseforge-shell-"));
+      await Promise.all(appCaches.map(key => caches.delete(key)));
+      log(`PulseForge caches cleared: ${appCaches.length}.`);
+    }
+  } catch (error) {
+    log(`Refresh cleanup warning: ${error.message}`);
+  }
+  const url = new URL(window.location.href);
+  url.searchParams.set("refresh", String(Date.now()));
+  window.location.replace(url.href);
+});
+
 setupMediaSession({
   onPlay: () => controller.play(),
   onPause: () => controller.pause(),

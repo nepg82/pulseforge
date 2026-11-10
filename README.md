@@ -9,6 +9,9 @@ A clean-start PWA focused on proving Android background playback and platform me
 - Media Session metadata and play, pause, stop, next, and previous handlers.
 - Minimal player UI; the animated visualizer has been removed.
 - Local diagnostics log and offline app-shell caching.
+- Build stamp in the footer (`YYMMDD-HHMM`); tap it to unregister the service worker, clear PulseForge's shell caches, and reload with a cache-busting query.
+- A first 16-step generative sequencer with three electronic patterns, kick/snare/hat percussion, bass, and midrange lead.
+- A stronger midrange mix for small and bone-conduction headphones, plus audio latency diagnostics.
 - No external libraries or network dependencies.
 
 ## Why the audio path changed
@@ -30,12 +33,13 @@ Then open `http://localhost:8000`. For Android testing, deploy the folder to an 
 ## Test sequence
 
 1. Update the existing deployed files and reload PulseForge. If the old shell remains cached, close the PWA and reopen it after the service-worker update.
-2. Start playback and confirm the synth is audible without an obvious loop point.
+2. Start playback and listen to the three sequenced patterns. Use previous/next to change them; each has a different tempo and arrangement.
 3. Lock the screen. Look for PulseForge track metadata and media controls in Android's lock screen / notification shade.
-4. Test play/pause and next/previous using the lock-screen controls and Bluetooth headset buttons.
-5. While playing, start another audio app and observe whether PulseForge yields.
-6. Take a phone call, then return and test recovery. PulseForge should not force audio to resume; press Play to resume after an interruption.
-7. Enable airplane mode, relaunch PulseForge, and test offline startup.
+4. Tap the centered build timestamp to force a server refresh. The app should reload and then register the service worker again.
+5. Test play/pause and next/previous using the lock-screen controls and Bluetooth headset buttons.
+6. While playing, start another audio app and observe whether PulseForge yields.
+7. Take a phone call, then return and test recovery. PulseForge should not force audio to resume; press Play to resume after an interruption.
+8. Enable airplane mode, relaunch PulseForge, and test offline startup.
 
 Open **Diagnostics** and copy the log after each test. The log records which Media Session actions the browser accepted and which actions Android sends back.
 
