@@ -1,52 +1,49 @@
-const CACHE_NAME = 'pulseforge-v1';
-const PRECACHE_ASSETS = [
-  './',
-  './index.html',
-  './styles.css',
-  './app.js',
-  './manifest.json',
-  './app-icons/app-icon-192.png',
-  './app-icons/app-icon-512.png',
-  'https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js'
+const CACHE_NAME = "pulseforge-shell-v0.1.0";
+const APP_SHELL = [
+  "./",
+  "./index.html",
+  "./manifest.json",
+  "./css/style.css",
+  "./js/app.js",
+  "./js/audio-engine.js",
+  "./js/playback.js",
+  "./js/media-session.js",
+  "./app-icons/app-icon-192.png",
+  "./app-icons/app-icon-512.png"
 ];
 
-self.addEventListener('install', (event) => {
+self.addEventListener("install", event => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(PRECACHE_ASSETS);
-    }).then(() => self.skipWaiting())
+    caches.open(CACHE_NAME)
+      .then(cache => cache.addAll(APP_SHELL))
+      .then(() => self.skipWaiting())
   );
 });
 
-self.addEventListener('activate', (event) => {
+self.addEventListener("activate", event => {
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.map((cache) => {
-          if (cache !== CACHE_NAME) {
-            return caches.delete(cache);
-          }
-        })
-      );
-    }).then(() => self.clients.claim())
+    caches.keys()
+      .then(keys => Promise.all(keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key))))
+      .then(() => self.clients.claim())
   );
 });
 
-self.addEventListener('fetch', (event) => {
+self.addEventListener("fetch", event => {
+  const request = event.request;
+  if (request.method !== "GET") return;
+
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        return cachedResponse;
-      }
-      return fetch(event.request).then((networkResponse) => {
-        if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic') {
-          return networkResponse;
+    caches.match(request).then(cached => {
+      if (cached) return cached;
+      return fetch(request).then(response => {
+        if (response && response.ok && new URL(request.url).origin === self.location.origin) {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(request, copy));
         }
-        const responseToCache = networkResponse.clone();
-        caches.open(CACHE_NAME).then((cache) => {
-          cache.put(event.request, responseToCache);
-        });
-        return networkResponse;
+        return response;
+      }).catch(() => {
+        if (request.mode === "navigate") return caches.match("./index.html");
+        throw new Error("Offline resource unavailable");
       });
     })
   );
