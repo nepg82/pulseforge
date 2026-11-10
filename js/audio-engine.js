@@ -8,15 +8,19 @@ export class AudioEngine {
     this.mediaSource = null;
     this.keepAliveUrl = null;
     this.master = null;
-    this.noiseBuffer = null;
     this.started = false;
     this.pattern = 0;
     this.step = 0;
     this.nextNoteTime = 0;
     this.schedulerTimer = null;
     this.schedulerWorker = null;
-    this.lookAhead = 0.25;
-    this.schedulerInterval = 25;
+    this.lookAhead = 0.5;
+    this.schedulerInterval = 50;
+    this.drumBuffers = null;
+    this.bassVoices = [];
+    this.leadVoices = [];
+    this.bassVoiceIndex = 0;
+    this.leadVoiceIndex = 0;
     this.patterns = [
       {
         name: "First Light", bpm: 110,
@@ -56,7 +60,7 @@ export class AudioEngine {
       await this.mediaElement.play();
       this.started = true;
       this.step = 0;
-      this.nextNoteTime = this.context.currentTime + 0.05;
+      this.nextNoteTime = this.context.currentTime + 0.08;
       this.#startScheduler();
       this.onState("playing");
       this.onLog(`Sequencer started: ${this.patterns[this.pattern].name}, ${this.patterns[this.pattern].bpm} BPM.`);
@@ -97,11 +101,18 @@ export class AudioEngine {
     const ctx = new AudioContextClass(), master = ctx.createGain();
     master.gain.value = 0.42;
     master.connect(ctx.destination);
+    this.master = master;
     this.mediaSource = ctx.createMediaElementSource(this.mediaElement);
     this.mediaSource.connect(master);
-    this.noiseBuffer = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
-    const noise = this.noiseBuffer.getChannelData(0);
-    for (let i = 0; i < noise.length; i++) noise[i] = Math.random() * 2 - 1;
+
+    this.drumBuffers = {
+      kick: this.#makeKickBuffer(ctx),
+      snare: this.#makeNoiseBuffer(ctx, 0.14, 1800, 0.13, true),
+      hat: this.#makeNoiseBuffer(ctx, 0.05, 7800, 0.045, false)
+    };
+    this.bassVoices = [this.#makeSynthVoice(ctx, "sawtooth", 620), this.#makeSynthVoice(ctx, "sawtooth", 620)];
+    this.leadVoices = [this.#makeSynthVoice(ctx, "triangle", 1900), this.#makeSynthVoice(ctx, "triangle", 1900)];
+
     this.context = ctx;
     this.master = master;
     ctx.onstatechange = () => {
@@ -111,7 +122,56 @@ export class AudioEngine {
     const baseLatency = Number.isFinite(ctx.baseLatency) ? `${Math.round(ctx.baseLatency * 1000)} ms` : "unavailable";
     const outputLatency = Number.isFinite(ctx.outputLatency) ? `${Math.round(ctx.outputLatency * 1000)} ms` : "unavailable";
     this.onLog(`Audio graph ready; sampleRate=${ctx.sampleRate}; baseLatency=${baseLatency}; outputLatency=${outputLatency}.`);
-    this.onLog("Sequenced synth uses a stronger midrange mix for small and bone-conduction headphones.");
+    this.onLog("Audio voices prebuilt; drum hits use rendered samples to minimize runtime node creation.");
+  }
+
+  #makeSynthVoice(ctx, oscillatorType, cutoff) {
+    const oscillator = ctx.createOscillator();
+    const filter = ctx.createBiquadFilter();
+    const gain = ctx.createGain();
+    oscillator.type = oscillatorType;
+    oscillator.frequency.value = 110;
+    filter.type = "lowpass";
+    filter.frequency.value = cutoff;
+    gain.gain.value = 0.0001;
+    oscillator.connect(filter).connect(gain).connect(this.master ?? ctx.destination);
+    oscillator.start();
+    return { oscillator, filter, gain };
+  }
+
+  #makeKickBuffer(ctx) {
+    const length = Math.floor(ctx.sampleRate * 0.30);
+    const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    let phase = 0;
+    for (let i = 0; i < length; i++) {
+      const t = i / ctx.sampleRate;
+      const frequency = t < 0.13 ? 135 * Math.pow(48 / 135, t / 0.13) : 48;
+      phase += 2 * Math.PI * frequency / ctx.sampleRate;
+      data[i] = Math.sin(phase) * 0.72 * Math.exp(-t * 14);
+    }
+    return buffer;
+  }
+
+  #makeNoiseBuffer(ctx, seconds, cutoff, peak, snare) {
+    const length = Math.floor(ctx.sampleRate * seconds);
+    const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    let previousInput = 0, previousOutput = 0;
+    const rc = 1 / (2 * Math.PI * cutoff);
+    const dt = 1 / ctx.sampleRate;
+    const alpha = rc / (rc + dt);
+    for (let i = 0; i < length; i++) {
+      const t = i / ctx.sampleRate;
+      const input = Math.random() * 2 - 1;
+      const high = alpha * (previousOutput + input - previousInput);
+      previousInput = input;
+      previousOutput = high;
+      const envelope = snare ? Math.exp(-t * 28) : Math.exp(-t * 90);
+      const body = snare ? Math.sin(2 * Math.PI * 185 * t) * Math.exp(-t * 24) * 0.18 : 0;
+      data[i] = (high * (snare ? 0.82 : 1) + body) * peak * envelope;
+    }
+    return buffer;
   }
 
   #startScheduler() {
@@ -129,7 +189,7 @@ export class AudioEngine {
           }
         };
         this.schedulerWorker.postMessage("start");
-        this.onLog("Background scheduler worker started (25 ms tick; 250 ms audio lookahead).");
+        this.onLog("Scheduler worker started (50 ms tick; 500 ms audio lookahead).");
         this.#schedulerTick();
         return;
       } catch (error) {
@@ -150,8 +210,9 @@ export class AudioEngine {
     if (!this.started || !this.context || this.context.state !== "running") return;
     const now = this.context.currentTime;
     if (this.nextNoteTime < now - 0.5) {
-      this.onLog("Scheduler fell more than 500 ms behind; resynchronizing without a burst of stale notes.");
-      this.nextNoteTime = now + 0.03;
+      const lateBy = Math.round((now - this.nextNoteTime) * 1000);
+      this.onLog(`Scheduler was ${lateBy} ms behind; resynchronizing.`);
+      this.nextNoteTime = now + 0.05;
     }
     const pattern = this.patterns[this.pattern];
     const stepDuration = 60 / pattern.bpm / 4;
@@ -162,33 +223,31 @@ export class AudioEngine {
     }
   }
 
+  #playSample(buffer, time) {
+    const source = this.context.createBufferSource();
+    source.buffer = buffer;
+    source.connect(this.master);
+    source.start(time);
+  }
+
+  #playSynth(voices, indexName, frequency, time, duration, peak) {
+    const index = this[indexName] % voices.length;
+    this[indexName]++;
+    const voice = voices[index];
+    const gain = voice.gain.gain;
+    gain.cancelScheduledValues(time);
+    gain.setValueAtTime(0.0001, time);
+    gain.linearRampToValueAtTime(peak, time + 0.012);
+    gain.exponentialRampToValueAtTime(0.0001, time + duration);
+    voice.oscillator.frequency.setValueAtTime(frequency, time);
+  }
+
   #scheduleStep(step, time, pattern) {
-    if (pattern.kick[step]) this.#kick(time);
-    if (pattern.snare[step]) this.#noiseHit(time, 0.12, 1800, 0.13);
-    if (pattern.hat[step]) this.#noiseHit(time, 0.045, 7800, 0.045);
-    if (pattern.bass[step]) this.#tone(time, pattern.bass[step], 0.19, "sawtooth", 620, 0.13);
-    if (pattern.lead[step]) this.#tone(time, pattern.lead[step], 0.14, "triangle", 1900, 0.075);
-  }
-
-  #kick(time) {
-    const ctx = this.context, osc = ctx.createOscillator(), gain = ctx.createGain();
-    osc.type = "sine"; osc.frequency.setValueAtTime(135, time); osc.frequency.exponentialRampToValueAtTime(48, time + 0.13);
-    gain.gain.setValueAtTime(0.72, time); gain.gain.exponentialRampToValueAtTime(0.001, time + 0.28);
-    osc.connect(gain).connect(this.master); osc.start(time); osc.stop(time + 0.29);
-  }
-
-  #tone(time, frequency, duration, type, cutoff, peak) {
-    const ctx = this.context, osc = ctx.createOscillator(), filter = ctx.createBiquadFilter(), gain = ctx.createGain();
-    osc.type = type; osc.frequency.setValueAtTime(frequency, time); filter.type = "lowpass"; filter.frequency.setValueAtTime(cutoff, time);
-    gain.gain.setValueAtTime(0.001, time); gain.gain.linearRampToValueAtTime(peak, time + 0.012); gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
-    osc.connect(filter).connect(gain).connect(this.master); osc.start(time); osc.stop(time + duration + 0.015);
-  }
-
-  #noiseHit(time, duration, cutoff, peak) {
-    const ctx = this.context, source = ctx.createBufferSource(), filter = ctx.createBiquadFilter(), gain = ctx.createGain();
-    source.buffer = this.noiseBuffer; filter.type = "highpass"; filter.frequency.setValueAtTime(cutoff, time);
-    gain.gain.setValueAtTime(0.001, time); gain.gain.linearRampToValueAtTime(peak, time + 0.004); gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
-    source.connect(filter).connect(gain).connect(this.master); source.start(time); source.stop(time + duration + 0.01);
+    if (pattern.kick[step]) this.#playSample(this.drumBuffers.kick, time);
+    if (pattern.snare[step]) this.#playSample(this.drumBuffers.snare, time);
+    if (pattern.hat[step]) this.#playSample(this.drumBuffers.hat, time);
+    if (pattern.bass[step]) this.#playSynth(this.bassVoices, "bassVoiceIndex", pattern.bass[step], time, 0.19, 0.13);
+    if (pattern.lead[step]) this.#playSynth(this.leadVoices, "leadVoiceIndex", pattern.lead[step], time, 0.14, 0.075);
   }
 
   async pause() {
@@ -215,7 +274,7 @@ export class AudioEngine {
   async changePattern(direction = 1) {
     this.pattern = (this.pattern + direction + this.patterns.length) % this.patterns.length;
     this.step = 0;
-    if (this.context && this.started) this.nextNoteTime = this.context.currentTime + 0.04;
+    if (this.context && this.started) this.nextNoteTime = this.context.currentTime + 0.05;
     this.onLog(`Pattern changed to ${this.patterns[this.pattern].name} (${this.patterns[this.pattern].bpm} BPM).`);
     return this.pattern;
   }
