@@ -9,6 +9,7 @@
   <link rel="manifest" href="./manifest.json">
   <link rel="icon" href="./app-icons/app-icon-192.png">
   <link rel="stylesheet" href="./css/style.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/15.1.22/Tone.js"></script>
 </head>
 <body>
   <main class="app-shell">
@@ -32,56 +33,32 @@
       </div>
 
       <div class="transport">
-        <button class="transport-button secondary" id="previous-button" type="button" aria-label="Previous pattern">
-          <span class="previous-icon"></span>
-        </button>
-        <button class="transport-button primary" id="play-button" type="button" aria-label="Play">
-          <span class="play-icon" id="play-icon"></span>
-          <span id="play-label">PLAY</span>
-        </button>
-        <button class="transport-button secondary" id="next-button" type="button" aria-label="Next pattern">
-          <span class="next-icon"></span>
-        </button>
-        <button class="transport-button secondary stop-button" id="stop-button" type="button" aria-label="Stop playback" disabled>
-          <span class="stop-icon"></span>
-        </button>
+        <button class="transport-button secondary" id="previous-button" type="button" aria-label="Previous pattern"><span class="previous-icon"></span></button>
+        <button class="transport-button primary" id="play-button" type="button" aria-label="Play"><span class="play-icon" id="play-icon"></span><span id="play-label">PLAY</span></button>
+        <button class="transport-button secondary" id="next-button" type="button" aria-label="Next pattern"><span class="next-icon"></span></button>
+        <button class="transport-button secondary stop-button" id="stop-button" type="button" aria-label="Stop playback" disabled><span class="stop-icon"></span></button>
       </div>
 
       <p class="hint" id="playback-hint">Tap play to start the audio engine.</p>
     </section>
 
     <section class="info-grid" aria-label="Playback information">
-      <div class="info-card">
-        <span class="info-label">ENGINE</span>
-        <strong id="engine-state">Not started</strong>
-      </div>
-      <div class="info-card">
-        <span class="info-label">OUTPUT</span>
-        <strong id="output-state">Not connected</strong>
-      </div>
-      <div class="info-card">
-        <span class="info-label">SESSION</span>
-        <strong id="session-time">00:00</strong>
-      </div>
+      <div class="info-card"><span class="info-label">ENGINE</span><strong id="engine-state">Not started</strong></div>
+      <div class="info-card"><span class="info-label">OUTPUT</span><strong id="output-state">Not connected</strong></div>
+      <div class="info-card"><span class="info-label">SESSION</span><strong id="session-time">00:00</strong></div>
     </section>
 
     <section class="diagnostics">
-      <button class="diagnostics-toggle" id="diagnostics-toggle" type="button" aria-expanded="false">
-        <span>DIAGNOSTICS</span><span class="chevron">⌄</span>
-      </button>
+      <button class="diagnostics-toggle" id="diagnostics-toggle" type="button" aria-expanded="false"><span>DIAGNOSTICS</span><span class="chevron">⌄</span></button>
       <div class="diagnostics-body" id="diagnostics-body" hidden>
-        <div class="diagnostics-actions">
-          <span class="diagnostics-note">Local playback log</span>
-          <button class="text-button" id="copy-log" type="button">COPY LOG</button>
-          <button class="text-button" id="clear-log" type="button">CLEAR</button>
-        </div>
+        <div class="diagnostics-actions"><span class="diagnostics-note">Local playback log</span><button class="text-button" id="copy-log" type="button">COPY LOG</button><button class="text-button" id="clear-log" type="button">CLEAR</button></div>
         <pre id="log" aria-live="polite">PulseForge ready.</pre>
       </div>
     </section>
 
     <footer>
       <span class="footer-left">BUILT FOR THE LONG RUN</span>
-      <button id="build-refresh" class="build-stamp" type="button" aria-label="Force reload PulseForge from the server" title="Tap to clear the app cache and reload from the server">261110-1102</button>
+      <button id="build-refresh" class="build-stamp" type="button" aria-label="Force reload PulseForge from the server" title="Tap to clear the app cache and reload from the server">261110-1120</button>
       <span id="install-state" class="footer-right">WEB APP</span>
     </footer>
   </main>

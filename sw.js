@@ -1,4 +1,5 @@
-const CACHE_NAME = "pulseforge-shell-v0.5.0";
+const CACHE_NAME = "pulseforge-shell-v0.6.0";
+const TONE_URL = "https://cdnjs.cloudflare.com/ajax/libs/tone/15.1.22/Tone.js";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -10,7 +11,8 @@ const APP_SHELL = [
   "./js/playback.js",
   "./js/media-session.js",
   "./app-icons/app-icon-192.png",
-  "./app-icons/app-icon-512.png"
+  "./app-icons/app-icon-512.png",
+  TONE_URL
 ];
 
 self.addEventListener("install", event => {
