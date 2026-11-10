@@ -71,7 +71,13 @@ export class AudioEngine {
       await this.mediaElement.play();
       this.started = true;
       this.step = 0;
-      this.nextNoteTime = this.context.currentTime + 0.08;
+      // Tone.now() includes Tone.js look-ahead. Scheduling relative only to
+      // AudioContext.currentTime can put the first event behind Tone's own
+      // timeline, especially immediately after resume. Also leave room for
+      // releases from any events queued before a pause or failed start.
+      const toneSafeStart = this.Tone.now() + 0.05;
+      const previousQueueEnd = this.nextNoteTime > 0 ? this.nextNoteTime + 0.35 : 0;
+      this.nextNoteTime = Math.max(toneSafeStart, previousQueueEnd);
       this.schedulerStats = this.#newSchedulerStats();
       this.lastSchedulerWallTime = null;
       this.lastStatsReport = performance.now();
@@ -153,13 +159,13 @@ export class AudioEngine {
     this.bass = new this.Tone.MonoSynth({
       oscillator: { type: "sawtooth" },
       filter: { type: "lowpass", Q: 1.2, rolloff: -24 },
-      filterEnvelope: { attack: 0.001, decay: 0.12, sustain: 0.18, release: 0.08, baseFrequency: 90, octaves: 2.2 },
-      envelope: { attack: 0.008, decay: 0.18, sustain: 0.12, release: 0.08 }
+      filterEnvelope: { attack: 0.001, decay: 0.12, sustain: 0.18, release: 0.05, baseFrequency: 90, octaves: 2.2 },
+      envelope: { attack: 0.008, decay: 0.18, sustain: 0.12, release: 0.05 }
     }).connect(this.toneOutput);
 
     this.lead = new this.Tone.Synth({
       oscillator: { type: "triangle" },
-      envelope: { attack: 0.012, decay: 0.12, sustain: 0.22, release: 0.12 }
+      envelope: { attack: 0.012, decay: 0.12, sustain: 0.22, release: 0.06 }
     }).connect(this.toneOutput);
 
     // Route both the quiet Android media keepalive and Tone.js through one
@@ -199,10 +205,13 @@ export class AudioEngine {
 
   #startScheduler() {
     this.#stopScheduler();
+    let workerReady = false;
     if (typeof Worker === "function") {
       try {
         this.schedulerWorker ??= new Worker(new URL("./scheduler-worker.js", import.meta.url));
-        this.schedulerWorker.onmessage = event => { if (event.data === "tick") this.#schedulerTick(); };
+        this.schedulerWorker.onmessage = event => {
+          if (event.data === "tick" && this.started) this.#schedulerTick();
+        };
         this.schedulerWorker.onerror = error => {
           this.onLog(`Scheduler worker failed; using page timer fallback: ${error.message || "worker error"}.`);
           this.schedulerWorker?.terminate();
@@ -212,14 +221,19 @@ export class AudioEngine {
           }
         };
         this.schedulerWorker.postMessage("start");
+        workerReady = true;
         this.onLog("Scheduler worker started (50 ms tick; 500 ms audio lookahead). ");
-        this.#schedulerTick();
-        return;
       } catch (error) {
         this.onLog(`Scheduler worker unavailable; using page timer fallback: ${error.message}.`);
+        this.schedulerWorker?.terminate();
+        this.schedulerWorker = null;
       }
     }
-    this.schedulerTimer = window.setInterval(() => this.#schedulerTick(), this.schedulerInterval);
+    if (!workerReady) {
+      this.schedulerTimer = window.setInterval(() => this.#schedulerTick(), this.schedulerInterval);
+    }
+    // Keep the first scheduling pass outside the Worker-construction catch.
+    // A Tone.js scheduling error is an audio-engine error, not a Worker failure.
     this.#schedulerTick();
   }
 
@@ -289,8 +303,8 @@ export class AudioEngine {
     if (pattern.kick[step]) { this.kick.triggerAttackRelease("C1", "8n", time, 0.9); count++; }
     if (pattern.snare[step]) { this.snare.triggerAttackRelease(0.13, time, 0.72); count++; }
     if (pattern.hat[step]) { this.hat.triggerAttackRelease(0.045, time, 0.48); count++; }
-    if (pattern.bass[step]) { this.bass.triggerAttackRelease(pattern.bass[step], 0.19, time, 0.68); count++; }
-    if (pattern.lead[step]) { this.lead.triggerAttackRelease(pattern.lead[step], 0.14, time, 0.58); count++; }
+    if (pattern.bass[step]) { this.bass.triggerAttackRelease(pattern.bass[step], 0.14, time, 0.68); count++; }
+    if (pattern.lead[step]) { this.lead.triggerAttackRelease(pattern.lead[step], 0.12, time, 0.58); count++; }
     return count;
   }
 
