@@ -1,0 +1,23 @@
+{
+  "name": "PulseForge Synthesizer",
+  "short_name": "PulseForge",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0d0f12",
+  "theme_color": "#12161f",
+  "description": "Procedural electronic music generator featuring Chillhop, Synthwave, Darksynth, and Dubstep styles.",
+  "icons": [
+    {
+      "src": "app-icons/app-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "app-icons/app-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
