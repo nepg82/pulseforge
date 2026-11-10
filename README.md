@@ -1,45 +1,47 @@
-# PulseForge — Milestone 1
+# PulseForge — Media Session test build
 
-A clean-start PWA focused on proving Android playback behavior before adding a full generative music system.
+A clean-start PWA focused on proving Android background playback and platform media controls before adding the full generative music system.
 
 ## Included
 
-- Web Audio synth test routed to a real `HTMLAudioElement` through `MediaStreamAudioDestinationNode`.
-- Media Session actions: play, pause, stop, next, previous.
-- Minimal responsive player UI and local diagnostics log.
-- Service worker app-shell caching for offline launch.
+- A 20-second, effectively inaudible WAV loop played by an `HTMLAudioElement`.
+- The media element is connected as an **input** to Web Audio; the synth is mixed into the same output.
+- Media Session metadata and play, pause, stop, next, and previous handlers.
+- Minimal player UI; the animated visualizer has been removed.
+- Local diagnostics log and offline app-shell caching.
 - No external libraries or network dependencies.
+
+## Why the audio path changed
+
+Chrome's Android Media Session guidance notes that Web Audio alone does not request Android audio focus in the same way as media playback. It recommends using an audio element as the input to Web Audio, and notes that Chrome for Android requires a media resource of at least five seconds for full audio focus. PulseForge now uses a 20-second quiet WAV loop as that media resource, then mixes the generated synth through Web Audio. The quiet loop should not be audible.
 
 ## Run locally
 
 The app must be served from HTTPS or localhost; opening `index.html` directly will not enable service workers.
 
-From the project folder, one option is:
+From the project folder:
 
 ```bash
 python3 -m http.server 8000
 ```
 
-Then open `http://localhost:8000` on the computer. For Android testing, deploy the folder to an HTTPS host such as GitHub Pages.
+Then open `http://localhost:8000`. For Android testing, deploy the folder to an HTTPS host.
 
-## First test sequence
+## Test sequence
 
-1. Open PulseForge in Chrome or Brave on the Motorola.
-2. Install it from the browser menu if offered.
-3. Start playback and confirm the sound is audible.
-4. Lock the screen for at least 5 minutes.
-5. Test Bluetooth play/pause and next/previous controls.
-6. While playing, start another audio app and observe whether PulseForge yields.
-7. Take a phone call, then return and test recovery.
-8. Enable airplane mode, relaunch PulseForge, and test offline startup.
+1. Update the existing deployed files and reload PulseForge. If the old shell remains cached, close the PWA and reopen it after the service-worker update.
+2. Start playback and confirm the synth is audible without an obvious loop point.
+3. Lock the screen. Look for PulseForge track metadata and media controls in Android's lock screen / notification shade.
+4. Test play/pause and next/previous using the lock-screen controls and Bluetooth headset buttons.
+5. While playing, start another audio app and observe whether PulseForge yields.
+6. Take a phone call, then return and test recovery. PulseForge should not force audio to resume; press Play to resume after an interruption.
+7. Enable airplane mode, relaunch PulseForge, and test offline startup.
 
-Open **Diagnostics** and copy the log after each test. Record whether the app was installed, browser used, screen state, Bluetooth device, and what happened.
+Open **Diagnostics** and copy the log after each test. The log records which Media Session actions the browser accepted and which actions Android sends back.
 
-## Important implementation note
+## Platform note
 
-This version deliberately sends the actual generated audio through the media element. It does not use Chillforge's separate near-silent WAV keepalive. That makes the browser/OS media-playback path easier to evaluate, but it is not yet proven on every Android/browser combination.
-
-The app does not automatically resume audio after an interruption. This is intentional: it avoids fighting the OS when another app or a phone call takes audio focus.
+The Media Session API lets the browser expose metadata and handlers to operating-system media controls, but the browser and device decide how those controls are presented. A successful handler registration does not guarantee that every Android skin or Bluetooth device will show every action.
 
 ## Cache updates
 

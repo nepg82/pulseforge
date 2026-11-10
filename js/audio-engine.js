@@ -1,15 +1,16 @@
 /**
- * PulseForge audio engine — Milestone 1.
- * A small always-running synth test, routed through a real HTMLMediaElement
- * via MediaStreamDestination so Android sees an active media playback element.
+ * PulseForge audio engine — Media Session test build.
+ * A quiet, looping media resource feeds Web Audio. This gives Android a real
+ * HTMLMediaElement playback session while the generated synth is mixed in Web Audio.
  */
 export class AudioEngine {
   constructor({ onState = () => {}, onLog = () => {} } = {}) {
     this.onState = onState;
     this.onLog = onLog;
     this.context = null;
-    this.output = null;
     this.mediaElement = null;
+    this.mediaSource = null;
+    this.keepAliveUrl = null;
     this.nodes = [];
     this.started = false;
     this.pattern = 0;
@@ -21,29 +22,76 @@ export class AudioEngine {
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
     if (!AudioContextClass) throw new Error("Web Audio is not supported in this browser.");
 
+    this.#prepareMediaElement();
     if (!this.context) this.#build(AudioContextClass);
-    if (this.context.state !== "running") await this.context.resume();
 
-    // The media element carries the actual synthesized signal, not a silent keepalive.
-    if (!this.mediaElement.srcObject) this.mediaElement.srcObject = this.output.stream;
-    this.mediaElement.loop = false;
-    this.mediaElement.volume = 1;
-    await this.mediaElement.play();
+    try {
+      if (this.context.state !== "running") await this.context.resume();
+      await this.mediaElement.play();
+      this.started = true;
+      this.onState("playing");
+      this.onLog(`Playback started; context=${this.context.state}; sampleRate=${this.context.sampleRate}`);
+      return this.getInfo();
+    } catch (error) {
+      this.started = false;
+      if (this.context?.state === "running") await this.context.suspend();
+      throw error;
+    }
+  }
 
-    this.started = true;
-    this.onState("playing");
-    this.onLog(`Audio started; context=${this.context.state}; sampleRate=${this.context.sampleRate}`);
-    return this.getInfo();
+  #prepareMediaElement() {
+    if (this.mediaElement.src) return;
+    const blob = this.#makeQuietLoop();
+    this.keepAliveUrl = URL.createObjectURL(blob);
+    this.mediaElement.src = this.keepAliveUrl;
+    this.mediaElement.loop = true;
+    this.mediaElement.preload = "auto";
+    this.mediaElement.playsInline = true;
+    this.mediaElement.load();
+    this.onLog("Prepared quiet looping media source for Android media playback.");
+  }
+
+  #makeQuietLoop() {
+    // 20 seconds at 8 kHz; an extremely low 20 Hz tone avoids a zero-data
+    // resource while remaining effectively inaudible. The loop is phase-aligned.
+    const sampleRate = 8000;
+    const seconds = 20;
+    const sampleCount = sampleRate * seconds;
+    const buffer = new ArrayBuffer(44 + sampleCount * 2);
+    const view = new DataView(buffer);
+    const writeText = (offset, value) => {
+      for (let i = 0; i < value.length; i++) view.setUint8(offset + i, value.charCodeAt(i));
+    };
+    writeText(0, "RIFF");
+    view.setUint32(4, 36 + sampleCount * 2, true);
+    writeText(8, "WAVE");
+    writeText(12, "fmt ");
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, 1, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * 2, true);
+    view.setUint16(32, 2, true);
+    view.setUint16(34, 16, true);
+    writeText(36, "data");
+    view.setUint32(40, sampleCount * 2, true);
+    for (let i = 0; i < sampleCount; i++) {
+      view.setInt16(44 + i * 2, Math.round(Math.sin((2 * Math.PI * 20 * i) / sampleRate) * 2), true);
+    }
+    return new Blob([buffer], { type: "audio/wav" });
   }
 
   #build(AudioContextClass) {
     const ctx = new AudioContextClass();
-    const output = ctx.createMediaStreamDestination();
     const master = ctx.createGain();
     master.gain.value = 0.18;
-    master.connect(output);
+    master.connect(ctx.destination);
 
-    // Warm, restrained bass pulse.
+    // The media element is the input to Web Audio (not the output). This is
+    // important for Chrome on Android to request normal media audio focus.
+    this.mediaSource = ctx.createMediaElementSource(this.mediaElement);
+    this.mediaSource.connect(master);
+
     const bass = ctx.createOscillator();
     bass.type = "sawtooth";
     bass.frequency.value = 55;
@@ -56,7 +104,6 @@ export class AudioEngine {
     bass.connect(bassFilter).connect(bassGain).connect(master);
     bass.start();
 
-    // Soft upper pulse, with a slow LFO for movement.
     const lead = ctx.createOscillator();
     lead.type = "triangle";
     lead.frequency.value = 110;
@@ -76,7 +123,6 @@ export class AudioEngine {
     lfo.connect(lfoGain).connect(leadFilter.frequency);
     lfo.start();
 
-    // Gentle amplitude movement, entirely audio-clock scheduled.
     const ampLfo = ctx.createOscillator();
     ampLfo.type = "sine";
     ampLfo.frequency.value = 0.72;
@@ -86,53 +132,46 @@ export class AudioEngine {
     ampLfo.start();
 
     this.context = ctx;
-    this.output = output;
     this.master = master;
     this.nodes = [bass, bassFilter, bassGain, lead, leadFilter, leadGain, lfo, lfoGain, ampLfo, ampDepth];
     ctx.onstatechange = () => {
       this.onLog(`AudioContext state: ${ctx.state}`);
-      this.onState(ctx.state === "running" ? "playing" : (ctx.state === "suspended" ? "interrupted" : ctx.state));
+      if (ctx.state === "suspended" && this.started) this.onState("interrupted");
     };
-    this.onLog(`Audio graph created; destination=MediaStreamAudioDestinationNode`);
+    this.onLog("Audio graph created; HTMLAudioElement feeds Web Audio destination.");
   }
 
   async pause() {
-    if (this.mediaElement && !this.mediaElement.paused) this.mediaElement.pause();
-    if (this.context && this.context.state === "running") await this.context.suspend();
     this.started = false;
-    this.onState("paused");
+    if (this.mediaElement && !this.mediaElement.paused) this.mediaElement.pause();
+    if (this.context?.state === "running") await this.context.suspend();
     this.onLog("Playback paused.");
+  }
+
+  async suspendForInterruption() {
+    this.started = false;
+    if (this.mediaElement && !this.mediaElement.paused) this.mediaElement.pause();
+    if (this.context?.state === "running") await this.context.suspend();
+    this.onLog("Audio engine suspended after an external interruption.");
   }
 
   async stop() {
     await this.pause();
     if (this.mediaElement) {
-      this.mediaElement.srcObject = null;
-      this.mediaElement.load();
+      try { this.mediaElement.currentTime = 0; } catch {}
     }
-    if (this.context) {
-      const ctx = this.context;
-      this.context = null;
-      this.output = null;
-      this.master = null;
-      this.nodes = [];
-      await ctx.close();
-    }
-    this.started = false;
-    this.onState("stopped");
-    this.onLog("Audio engine stopped and released.");
+    this.onLog("Playback stopped; audio graph kept ready for the next start.");
   }
 
-  async changePattern() {
-    this.pattern = (this.pattern + 1) % 3;
+  async changePattern(direction = 1) {
+    this.pattern = (this.pattern + direction + 3) % 3;
     if (!this.context || !this.master) return this.pattern;
-    const now = this.context.currentTime;
     const settings = [
       { bass: 55, lead: 110, filter: 520, level: 0.18 },
       { bass: 65.4, lead: 130.8, filter: 760, level: 0.16 },
       { bass: 49, lead: 98, filter: 390, level: 0.20 }
     ][this.pattern];
-    // Oscillator frequencies are updated without rebuilding the graph.
+    const now = this.context.currentTime;
     this.nodes[0].frequency.setTargetAtTime(settings.bass, now, 0.18);
     this.nodes[3].frequency.setTargetAtTime(settings.lead, now, 0.18);
     this.nodes[4].frequency.setTargetAtTime(settings.filter, now, 0.25);
@@ -145,7 +184,7 @@ export class AudioEngine {
     return {
       contextState: this.context?.state ?? "not created",
       sampleRate: this.context?.sampleRate ?? null,
-      outputConnected: Boolean(this.output),
+      outputConnected: Boolean(this.master),
       pattern: this.pattern + 1
     };
   }

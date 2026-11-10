@@ -25,14 +25,6 @@
     </header>
 
     <section class="player-panel" aria-label="Audio player">
-      <div class="visualizer" id="visualizer" aria-hidden="true">
-        <div class="visualizer-grid"></div>
-        <div class="pulse-ring ring-one"></div>
-        <div class="pulse-ring ring-two"></div>
-        <div class="pulse-core"></div>
-        <div class="visualizer-label">SIGNAL <span id="signal-state">IDLE</span></div>
-      </div>
-
       <div class="track-info">
         <p class="eyebrow">CURRENT SESSION</p>
         <h2 id="track-title">First Light</h2>
@@ -40,15 +32,18 @@
       </div>
 
       <div class="transport">
-        <button class="transport-button secondary" id="stop-button" type="button" aria-label="Stop playback" disabled>
-          <span class="stop-icon"></span>
+        <button class="transport-button secondary" id="previous-button" type="button" aria-label="Previous pattern">
+          <span class="previous-icon"></span>
         </button>
         <button class="transport-button primary" id="play-button" type="button" aria-label="Play">
           <span class="play-icon" id="play-icon"></span>
           <span id="play-label">PLAY</span>
         </button>
-        <button class="transport-button secondary" id="next-button" type="button" aria-label="Change pattern">
+        <button class="transport-button secondary" id="next-button" type="button" aria-label="Next pattern">
           <span class="next-icon"></span>
+        </button>
+        <button class="transport-button secondary stop-button" id="stop-button" type="button" aria-label="Stop playback" disabled>
+          <span class="stop-icon"></span>
         </button>
       </div>
 

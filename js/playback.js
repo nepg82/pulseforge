@@ -8,57 +8,58 @@ export class PlaybackController {
     this.startedAt = 0;
     this.elapsedBeforeStart = 0;
     this.sessionTimer = null;
+    this.startPromise = null;
 
     this.mediaElement.addEventListener("pause", () => {
-      if (this.state === "playing") {
-        this.onLog("Media element paused outside the app; treating this as an interruption.");
-        this.state = "interrupted";
-        this.onState(this.state);
-      }
+      if (this.state !== "playing" || !this.engine.started) return;
+      this.onLog("Media element paused outside PulseForge; yielding audio focus.");
+      void this.handleExternalPause();
     });
-    this.mediaElement.addEventListener("playing", () => {
-      if (this.state === "interrupted") {
-        this.onLog("Media element resumed by the browser or operating system.");
-        this.state = "playing";
-        this.startedAt = Date.now();
-        this.onState(this.state);
-      }
-    });
+
     this.mediaElement.addEventListener("error", () => {
       this.onLog(`Media element error: ${this.mediaElement.error?.message || "unknown error"}`);
     });
   }
 
   async play() {
-    try {
-      await this.engine.start(this.mediaElement);
-      this.state = "playing";
-      this.startedAt = Date.now();
-      this.#startClock();
-      this.onState(this.state);
-    } catch (error) {
-      this.onLog(`PLAY ERROR: ${error.message}`);
-      this.state = "stopped";
-      this.onState(this.state);
-      throw error;
-    }
+    if (this.state === "playing") return;
+    if (this.startPromise) return this.startPromise;
+    this.startPromise = (async () => {
+      try {
+        await this.engine.start(this.mediaElement);
+        this.state = "playing";
+        this.startedAt = Date.now();
+        this.#startClock();
+        this.onState(this.state, this.#elapsed());
+      } catch (error) {
+        this.state = "stopped";
+        this.onState(this.state);
+        this.onLog(`PLAY ERROR: ${error.message}`);
+        throw error;
+      } finally {
+        this.startPromise = null;
+      }
+    })();
+    return this.startPromise;
   }
 
   async pause() {
+    if (this.state !== "playing") return;
     await this.engine.pause();
     this.#accumulateTime();
     this.#stopClock();
     this.state = "paused";
-    this.onState(this.state);
+    this.onState(this.state, this.#elapsed());
   }
 
   async stop() {
-    this.#accumulateTime();
-    this.#stopClock();
+    if (this.state === "stopped") return;
     await this.engine.stop();
+    this.#stopClock();
+    this.startedAt = 0;
     this.elapsedBeforeStart = 0;
     this.state = "stopped";
-    this.onState(this.state);
+    this.onState(this.state, 0);
   }
 
   async toggle() {
@@ -66,17 +67,21 @@ export class PlaybackController {
     return this.play();
   }
 
-  async changePattern() {
-    return this.engine.changePattern();
+  async changePattern(direction = 1) {
+    return this.engine.changePattern(direction);
   }
 
-  handleExternalPause() {
+  async handleExternalPause() {
     if (this.state !== "playing") return;
     this.#accumulateTime();
     this.#stopClock();
-    if (!this.mediaElement.paused) this.mediaElement.pause();
     this.state = "interrupted";
-    this.onState(this.state);
+    await this.engine.suspendForInterruption();
+    this.onState(this.state, this.#elapsed());
+  }
+
+  #elapsed() {
+    return this.elapsedBeforeStart + (this.startedAt ? Math.max(0, Date.now() - this.startedAt) : 0);
   }
 
   #accumulateTime() {
@@ -88,14 +93,11 @@ export class PlaybackController {
 
   #startClock() {
     this.#stopClock();
-    this.sessionTimer = window.setInterval(() => {
-      const elapsed = this.elapsedBeforeStart + (Date.now() - this.startedAt);
-      this.onState(this.state, elapsed);
-    }, 1000);
+    this.sessionTimer = window.setInterval(() => this.onState(this.state, this.#elapsed()), 1000);
   }
 
   #stopClock() {
-    if (this.sessionTimer) window.clearInterval(this.sessionTimer);
+    if (this.sessionTimer !== null) window.clearInterval(this.sessionTimer);
     this.sessionTimer = null;
   }
 }
