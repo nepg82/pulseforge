@@ -225,7 +225,8 @@ export class AudioEngine {
 
   #newSchedulerStats() {
     return { ticks: 0, delayedTicks: 0, maxTickGapMs: 0, scheduledSteps: 0,
-      scheduledNotes: 0, lateNotes: 0, maxLateMs: 0, maxScheduleWorkMs: 0 };
+      scheduledNotes: 0, lateNotes: 0, maxLateMs: 0, maxScheduleWorkMs: 0,
+      maxStepsPerTick: 0, cappedTicks: 0 };
   }
 
   #schedulerTick() {
@@ -249,7 +250,11 @@ export class AudioEngine {
     const pattern = this.patterns[this.pattern];
     const stepDuration = 60 / pattern.bpm / 4;
     const workStart = performance.now();
-    while (this.nextNoteTime < now + this.lookAhead) {
+    let stepsThisTick = 0;
+    // Keep each main-thread scheduling task short. The 500 ms lookahead gives
+    // us room to spread event creation across worker ticks instead of building
+    // a large burst of Tone.js nodes in one task.
+    while (this.nextNoteTime < now + this.lookAhead && stepsThisTick < 2) {
       const lateness = now - this.nextNoteTime;
       if (lateness > 0) {
         stats.lateNotes++;
@@ -257,13 +262,16 @@ export class AudioEngine {
       }
       stats.scheduledNotes += this.#scheduleStep(this.step, this.nextNoteTime, pattern);
       stats.scheduledSteps++;
+      stepsThisTick++;
       this.nextNoteTime += stepDuration;
       this.step = (this.step + 1) % 16;
     }
+    stats.maxStepsPerTick = Math.max(stats.maxStepsPerTick, stepsThisTick);
+    if (stepsThisTick === 2 && this.nextNoteTime < now + this.lookAhead) stats.cappedTicks++;
     stats.maxScheduleWorkMs = Math.max(stats.maxScheduleWorkMs, performance.now() - workStart);
 
     if (wallNow - this.lastStatsReport >= 10000) {
-      const summary = `Scheduler 10s: ${stats.ticks} ticks; ${stats.delayedTicks} gaps >100ms; max gap ${Math.round(stats.maxTickGapMs)}ms; ${stats.scheduledSteps} steps/${stats.scheduledNotes} notes; ${stats.lateNotes} late notes (max ${stats.maxLateMs.toFixed(1)}ms); max scheduling work ${stats.maxScheduleWorkMs.toFixed(2)}ms.`;
+      const summary = `Scheduler 10s: ${stats.ticks} ticks; ${stats.delayedTicks} gaps >100ms; max gap ${Math.round(stats.maxTickGapMs)}ms; ${stats.scheduledSteps} steps/${stats.scheduledNotes} notes; ${stats.lateNotes} late notes (max ${stats.maxLateMs.toFixed(1)}ms); max batch ${stats.maxStepsPerTick} steps (${stats.cappedTicks} capped ticks); max scheduling work ${stats.maxScheduleWorkMs.toFixed(2)}ms.`;
       this.onLog(summary);
       this.schedulerStats = this.#newSchedulerStats();
       this.lastStatsReport = wallNow;
@@ -304,8 +312,10 @@ export class AudioEngine {
   async changePattern(direction = 1) {
     this.pattern = (this.pattern + direction + this.patterns.length) % this.patterns.length;
     this.step = 0;
-    if (this.context && this.started) this.nextNoteTime = this.context.currentTime + 0.05;
-    this.onLog(`Pattern changed to ${this.patterns[this.pattern].name} (${this.patterns[this.pattern].bpm} BPM).`);
+    // Do not pull the audio timeline forward: Tone.js may already have queued
+    // the previous pattern through the lookahead window. Start the new pattern
+    // at the next unqueued step to avoid scheduling it only 50 ms ahead.
+    this.onLog(`Pattern changed to ${this.patterns[this.pattern].name} (${this.patterns[this.pattern].bpm} BPM); switching at the next scheduled boundary.`);
     return this.pattern;
   }
 

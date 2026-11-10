@@ -12,8 +12,12 @@ function log(message) {
   const stamp = new Date().toLocaleTimeString();
   logLines.push(`[${stamp}] ${message}`);
   if (logLines.length > 180) logLines.shift();
-  logElement.textContent = logLines.join("\n");
-  logElement.scrollTop = logElement.scrollHeight;
+  // Keep the live log in memory, but don't force DOM/layout work while the
+  // diagnostics panel is collapsed. The complete log is rendered when opened.
+  if (!$("diagnostics-body").hidden) {
+    logElement.textContent = logLines.join("\n");
+    logElement.scrollTop = logElement.scrollHeight;
+  }
   console.info(`[PulseForge] ${message}`);
 }
 
@@ -74,6 +78,10 @@ $("diagnostics-toggle").addEventListener("click", () => {
   const expanded = button.getAttribute("aria-expanded") === "true";
   button.setAttribute("aria-expanded", String(!expanded));
   $("diagnostics-body").hidden = expanded;
+  if (!expanded) {
+    logElement.textContent = logLines.join("\n");
+    logElement.scrollTop = logElement.scrollHeight;
+  }
 });
 $("copy-log").addEventListener("click", async () => {
   try { await navigator.clipboard.writeText(logLines.join("\n")); log("Diagnostics copied to clipboard."); }
