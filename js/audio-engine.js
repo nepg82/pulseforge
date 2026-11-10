@@ -130,7 +130,6 @@ export class AudioEngine {
     this.compressor = new this.Tone.Compressor({ threshold: -18, ratio: 3, attack: 0.004, release: 0.16 });
     this.limiter = new this.Tone.Limiter(-1);
     this.toneOutput.chain(this.compressor, this.limiter);
-    this.limiter.toDestination();
 
     this.kick = new this.Tone.MembraneSynth({
       pitchDecay: 0.045, octaves: 5, oscillator: { type: "sine" },
@@ -162,6 +161,13 @@ export class AudioEngine {
       oscillator: { type: "triangle" },
       envelope: { attack: 0.012, decay: 0.12, sustain: 0.22, release: 0.12 }
     }).connect(this.toneOutput);
+
+    // Route both the quiet Android media keepalive and Tone.js through one
+    // Web Audio output graph. This avoids running two independent audio paths
+    // on Android, which can produce occasional handoff/buffering artifacts.
+    this.mediaSource = ctx.createMediaElementSource(this.mediaElement);
+    this.mediaSource.connect(master);
+    this.limiter.connect(master);
 
     ctx.onstatechange = () => {
       this.onLog(`AudioContext state: ${ctx.state}`);

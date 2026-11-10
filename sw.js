@@ -1,4 +1,4 @@
-const CACHE_NAME = "pulseforge-shell-v0.6.3";
+const CACHE_NAME = "pulseforge-shell-v0.6.4";
 const TONE_URL = "https://cdnjs.cloudflare.com/ajax/libs/tone/15.1.22/Tone.js";
 const APP_SHELL = [
   "./",
