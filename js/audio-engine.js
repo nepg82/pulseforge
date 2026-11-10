@@ -1,8 +1,4 @@
-/**
- * PulseForge audio engine — first sequenced-generation prototype.
- * A quiet looping media element keeps Android's media session alive; the
- * sequenced Web Audio instruments are mixed into the same output.
- */
+/** PulseForge sequenced audio engine. */
 export class AudioEngine {
   constructor({ onState = () => {}, onLog = () => {} } = {}) {
     this.onState = onState;
@@ -18,7 +14,8 @@ export class AudioEngine {
     this.step = 0;
     this.nextNoteTime = 0;
     this.schedulerTimer = null;
-    this.lookAhead = 0.12;
+    this.schedulerWorker = null;
+    this.lookAhead = 0.25;
     this.schedulerInterval = 25;
     this.patterns = [
       {
@@ -52,10 +49,8 @@ export class AudioEngine {
     this.mediaElement = mediaElement;
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
     if (!AudioContextClass) throw new Error("Web Audio is not supported in this browser.");
-
     this.#prepareMediaElement();
     if (!this.context) this.#build(AudioContextClass);
-
     try {
       if (this.context.state !== "running") await this.context.resume();
       await this.mediaElement.play();
@@ -87,45 +82,26 @@ export class AudioEngine {
   }
 
   #makeQuietLoop() {
-    const sampleRate = 8000;
-    const seconds = 20;
-    const sampleCount = sampleRate * seconds;
-    const buffer = new ArrayBuffer(44 + sampleCount * 2);
-    const view = new DataView(buffer);
-    const writeText = (offset, value) => {
-      for (let i = 0; i < value.length; i++) view.setUint8(offset + i, value.charCodeAt(i));
-    };
-    writeText(0, "RIFF");
-    view.setUint32(4, 36 + sampleCount * 2, true);
-    writeText(8, "WAVE");
-    writeText(12, "fmt ");
-    view.setUint32(16, 16, true);
-    view.setUint16(20, 1, true);
-    view.setUint16(22, 1, true);
-    view.setUint32(24, sampleRate, true);
-    view.setUint32(28, sampleRate * 2, true);
-    view.setUint16(32, 2, true);
-    view.setUint16(34, 16, true);
-    writeText(36, "data");
-    view.setUint32(40, sampleCount * 2, true);
-    for (let i = 0; i < sampleCount; i++) {
-      view.setInt16(44 + i * 2, Math.round(Math.sin((2 * Math.PI * 20 * i) / sampleRate) * 2), true);
-    }
+    const sampleRate = 8000, seconds = 20, sampleCount = sampleRate * seconds;
+    const buffer = new ArrayBuffer(44 + sampleCount * 2), view = new DataView(buffer);
+    const writeText = (offset, value) => { for (let i = 0; i < value.length; i++) view.setUint8(offset + i, value.charCodeAt(i)); };
+    writeText(0, "RIFF"); view.setUint32(4, 36 + sampleCount * 2, true); writeText(8, "WAVE");
+    writeText(12, "fmt "); view.setUint32(16, 16, true); view.setUint16(20, 1, true);
+    view.setUint16(22, 1, true); view.setUint32(24, sampleRate, true); view.setUint32(28, sampleRate * 2, true);
+    view.setUint16(32, 2, true); view.setUint16(34, 16, true); writeText(36, "data"); view.setUint32(40, sampleCount * 2, true);
+    for (let i = 0; i < sampleCount; i++) view.setInt16(44 + i * 2, Math.round(Math.sin(2 * Math.PI * 20 * i / sampleRate) * 2), true);
     return new Blob([buffer], { type: "audio/wav" });
   }
 
   #build(AudioContextClass) {
-    const ctx = new AudioContextClass();
-    const master = ctx.createGain();
+    const ctx = new AudioContextClass(), master = ctx.createGain();
     master.gain.value = 0.42;
     master.connect(ctx.destination);
-
     this.mediaSource = ctx.createMediaElementSource(this.mediaElement);
     this.mediaSource.connect(master);
     this.noiseBuffer = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
     const noise = this.noiseBuffer.getChannelData(0);
     for (let i = 0; i < noise.length; i++) noise[i] = Math.random() * 2 - 1;
-
     this.context = ctx;
     this.master = master;
     ctx.onstatechange = () => {
@@ -140,6 +116,26 @@ export class AudioEngine {
 
   #startScheduler() {
     this.#stopScheduler();
+    if (typeof Worker === "function") {
+      try {
+        this.schedulerWorker ??= new Worker(new URL("./scheduler-worker.js", import.meta.url));
+        this.schedulerWorker.onmessage = event => { if (event.data === "tick") this.#schedulerTick(); };
+        this.schedulerWorker.onerror = error => {
+          this.onLog(`Scheduler worker failed; using page timer fallback: ${error.message || "worker error"}.`);
+          this.schedulerWorker?.terminate();
+          this.schedulerWorker = null;
+          if (this.started && this.schedulerTimer === null) {
+            this.schedulerTimer = window.setInterval(() => this.#schedulerTick(), this.schedulerInterval);
+          }
+        };
+        this.schedulerWorker.postMessage("start");
+        this.onLog("Background scheduler worker started (25 ms tick; 250 ms audio lookahead).");
+        this.#schedulerTick();
+        return;
+      } catch (error) {
+        this.onLog(`Scheduler worker unavailable; using page timer fallback: ${error.message}.`);
+      }
+    }
     this.schedulerTimer = window.setInterval(() => this.#schedulerTick(), this.schedulerInterval);
     this.#schedulerTick();
   }
@@ -147,13 +143,14 @@ export class AudioEngine {
   #stopScheduler() {
     if (this.schedulerTimer !== null) window.clearInterval(this.schedulerTimer);
     this.schedulerTimer = null;
+    if (this.schedulerWorker) this.schedulerWorker.postMessage("stop");
   }
 
   #schedulerTick() {
     if (!this.started || !this.context || this.context.state !== "running") return;
     const now = this.context.currentTime;
-    if (this.nextNoteTime < now - 0.15) {
-      this.onLog("Scheduler recovered from a late tick; skipped stale steps to avoid a burst.");
+    if (this.nextNoteTime < now - 0.5) {
+      this.onLog("Scheduler fell more than 500 ms behind; resynchronizing without a burst of stale notes.");
       this.nextNoteTime = now + 0.03;
     }
     const pattern = this.patterns[this.pattern];
@@ -169,70 +166,40 @@ export class AudioEngine {
     if (pattern.kick[step]) this.#kick(time);
     if (pattern.snare[step]) this.#noiseHit(time, 0.12, 1800, 0.13);
     if (pattern.hat[step]) this.#noiseHit(time, 0.045, 7800, 0.045);
-    const bassNote = pattern.bass[step];
-    if (bassNote) this.#tone(time, bassNote, 0.19, "sawtooth", 620, 0.13);
-    const leadNote = pattern.lead[step];
-    if (leadNote) this.#tone(time, leadNote, 0.14, "triangle", 1900, 0.075);
+    if (pattern.bass[step]) this.#tone(time, pattern.bass[step], 0.19, "sawtooth", 620, 0.13);
+    if (pattern.lead[step]) this.#tone(time, pattern.lead[step], 0.14, "triangle", 1900, 0.075);
   }
 
   #kick(time) {
-    const ctx = this.context;
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = "sine";
-    osc.frequency.setValueAtTime(135, time);
-    osc.frequency.exponentialRampToValueAtTime(48, time + 0.13);
-    gain.gain.setValueAtTime(0.72, time);
-    gain.gain.exponentialRampToValueAtTime(0.001, time + 0.28);
-    osc.connect(gain).connect(this.master);
-    osc.start(time);
-    osc.stop(time + 0.29);
+    const ctx = this.context, osc = ctx.createOscillator(), gain = ctx.createGain();
+    osc.type = "sine"; osc.frequency.setValueAtTime(135, time); osc.frequency.exponentialRampToValueAtTime(48, time + 0.13);
+    gain.gain.setValueAtTime(0.72, time); gain.gain.exponentialRampToValueAtTime(0.001, time + 0.28);
+    osc.connect(gain).connect(this.master); osc.start(time); osc.stop(time + 0.29);
   }
 
   #tone(time, frequency, duration, type, cutoff, peak) {
-    const ctx = this.context;
-    const osc = ctx.createOscillator();
-    const filter = ctx.createBiquadFilter();
-    const gain = ctx.createGain();
-    osc.type = type;
-    osc.frequency.setValueAtTime(frequency, time);
-    filter.type = "lowpass";
-    filter.frequency.setValueAtTime(cutoff, time);
-    gain.gain.setValueAtTime(0.001, time);
-    gain.gain.linearRampToValueAtTime(peak, time + 0.012);
-    gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
-    osc.connect(filter).connect(gain).connect(this.master);
-    osc.start(time);
-    osc.stop(time + duration + 0.015);
+    const ctx = this.context, osc = ctx.createOscillator(), filter = ctx.createBiquadFilter(), gain = ctx.createGain();
+    osc.type = type; osc.frequency.setValueAtTime(frequency, time); filter.type = "lowpass"; filter.frequency.setValueAtTime(cutoff, time);
+    gain.gain.setValueAtTime(0.001, time); gain.gain.linearRampToValueAtTime(peak, time + 0.012); gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
+    osc.connect(filter).connect(gain).connect(this.master); osc.start(time); osc.stop(time + duration + 0.015);
   }
 
   #noiseHit(time, duration, cutoff, peak) {
-    const ctx = this.context;
-    const source = ctx.createBufferSource();
-    const filter = ctx.createBiquadFilter();
-    const gain = ctx.createGain();
-    source.buffer = this.noiseBuffer;
-    filter.type = "highpass";
-    filter.frequency.setValueAtTime(cutoff, time);
-    gain.gain.setValueAtTime(0.001, time);
-    gain.gain.linearRampToValueAtTime(peak, time + 0.004);
-    gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
-    source.connect(filter).connect(gain).connect(this.master);
-    source.start(time);
-    source.stop(time + duration + 0.01);
+    const ctx = this.context, source = ctx.createBufferSource(), filter = ctx.createBiquadFilter(), gain = ctx.createGain();
+    source.buffer = this.noiseBuffer; filter.type = "highpass"; filter.frequency.setValueAtTime(cutoff, time);
+    gain.gain.setValueAtTime(0.001, time); gain.gain.linearRampToValueAtTime(peak, time + 0.004); gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
+    source.connect(filter).connect(gain).connect(this.master); source.start(time); source.stop(time + duration + 0.01);
   }
 
   async pause() {
-    this.started = false;
-    this.#stopScheduler();
+    this.started = false; this.#stopScheduler();
     if (this.mediaElement && !this.mediaElement.paused) this.mediaElement.pause();
     if (this.context?.state === "running") await this.context.suspend();
     this.onLog("Playback paused; sequencer clock suspended.");
   }
 
   async suspendForInterruption() {
-    this.started = false;
-    this.#stopScheduler();
+    this.started = false; this.#stopScheduler();
     if (this.mediaElement && !this.mediaElement.paused) this.mediaElement.pause();
     if (this.context?.state === "running") await this.context.suspend();
     this.onLog("Audio engine suspended after an external interruption.");
@@ -240,9 +207,7 @@ export class AudioEngine {
 
   async stop() {
     await this.pause();
-    if (this.mediaElement) {
-      try { this.mediaElement.currentTime = 0; } catch {}
-    }
+    if (this.mediaElement) { try { this.mediaElement.currentTime = 0; } catch {} }
     this.step = 0;
     this.onLog("Playback stopped; audio graph kept ready for the next start.");
   }
@@ -256,12 +221,7 @@ export class AudioEngine {
   }
 
   getInfo() {
-    return {
-      contextState: this.context?.state ?? "not created",
-      sampleRate: this.context?.sampleRate ?? null,
-      outputConnected: Boolean(this.master),
-      pattern: this.pattern + 1,
-      bpm: this.patterns[this.pattern].bpm
-    };
+    return { contextState: this.context?.state ?? "not created", sampleRate: this.context?.sampleRate ?? null,
+      outputConnected: Boolean(this.master), pattern: this.pattern + 1, bpm: this.patterns[this.pattern].bpm };
   }
 }
