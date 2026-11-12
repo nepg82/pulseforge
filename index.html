@@ -18,20 +18,17 @@
     <header class="app-header">
       <div class="eyebrow">GENERATIVE AUDIO</div>
       <h1>PulseForge</h1>
-      <button id="buildStamp" class="build-stamp" type="button" aria-expanded="false" aria-controls="diagnostics">261112-1308</button>
+      <button id="buildStamp" class="build-stamp" type="button" aria-expanded="false" aria-controls="diagnostics">261112-1447</button>
     </header>
 
     <section class="player-card" aria-label="Chillwave music preview">
       <div class="status-line"><span id="statusDot" class="status-dot"></span><span id="statusText">Ready</span></div>
-      <div class="pulse-mark" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
-      <p class="test-label">CHILLWAVE · MELODY STUDY</p>
-      <p class="test-description">A slowly evolving four-chord pad, conversational melody, and relaxed adjustable drum groove.</p>
       <button id="playButton" class="play-button" type="button">Start music</button>
     </section>
 
     <section class="drum-controls pad-controls" aria-label="Pad controls">
       <div class="controls-heading">
-        <div class="section-heading">Pad shape</div>
+        <div class="section-heading">Pad</div>
         <label class="pad-shape-select" for="padShape">
           <span class="visually-hidden">Pad waveform</span>
           <select id="padShape">
@@ -41,6 +38,7 @@
           </select>
         </label>
       </div>
+      <div class="stepper-row"><span>Volume</span><div class="stepper" data-control="padVolume"><button type="button" data-delta="-5" aria-label="Decrease pad volume">−</button><output id="padVolumeValue">100%</output><button type="button" data-delta="5" aria-label="Increase pad volume">+</button></div></div>
     </section>
 
     <section class="drum-controls" aria-label="Melody controls">
@@ -55,11 +53,8 @@
           <option value="triangle">Triangle</option>
         </select>
       </div>
-      <div class="level-control">
-        <label for="melodyDensity">Density</label>
-        <input id="melodyDensity" type="range" min="0" max="100" step="1" value="50">
-        <output id="melodyDensityValue" for="melodyDensity">50%</output>
-      </div>
+      <div class="stepper-row"><span>Volume</span><div class="stepper" data-control="melodyVolume"><button type="button" data-delta="-5" aria-label="Decrease melody volume">−</button><output id="melodyVolumeValue">100%</output><button type="button" data-delta="5" aria-label="Increase melody volume">+</button></div></div>
+      <div class="stepper-row"><span>Density</span><div class="stepper" data-control="melodyDensity"><button type="button" data-delta="-5" aria-label="Decrease melody density">−</button><output id="melodyDensityValue">50%</output><button type="button" data-delta="5" aria-label="Increase melody density">+</button></div></div>
     </section>
 
     <section class="drum-controls" aria-label="Drum controls">
@@ -67,25 +62,26 @@
         <div class="section-heading">Drums</div>
         <label class="drum-enable"><input id="drumsEnabled" type="checkbox" checked><span>On</span></label>
       </div>
-      <div class="level-control">
-        <label for="kickLevel">Kick</label>
-        <input id="kickLevel" type="range" min="0" max="100" value="65">
-        <output id="kickValue" for="kickLevel">65%</output>
-      </div>
-      <div class="level-control">
-        <label for="snareLevel">Snare</label>
-        <input id="snareLevel" type="range" min="0" max="100" value="45">
-        <output id="snareValue" for="snareLevel">45%</output>
-      </div>
-      <div class="level-control">
-        <label for="hatLevel">Hi-hat</label>
-        <input id="hatLevel" type="range" min="0" max="100" value="22">
-        <output id="hatValue" for="hatLevel">22%</output>
-      </div>
+      <div class="stepper-row"><span>Kick</span><div class="stepper" data-control="kickLevel"><button type="button" data-delta="-5" aria-label="Decrease kick volume">−</button><output id="kickValue">65%</output><button type="button" data-delta="5" aria-label="Increase kick volume">+</button></div></div>
+      <div class="stepper-row"><span>Snare</span><div class="stepper" data-control="snareLevel"><button type="button" data-delta="-5" aria-label="Decrease snare volume">−</button><output id="snareValue">45%</output><button type="button" data-delta="5" aria-label="Increase snare volume">+</button></div></div>
+      <div class="stepper-row"><span>Hi-hat</span><div class="stepper" data-control="hatLevel"><button type="button" data-delta="-5" aria-label="Decrease hi-hat volume">−</button><output id="hatValue">22%</output><button type="button" data-delta="5" aria-label="Increase hi-hat volume">+</button></div></div>
     </section>
+
+    <section class="drum-controls global-controls" aria-label="Tempo and tone controls">
+      <div class="stepper-row"><span>Tempo</span><div class="stepper" data-control="bpm"><button type="button" data-delta="-5" aria-label="Decrease tempo">−</button><output id="bpmValue">60 BPM</output><button type="button" data-delta="5" aria-label="Increase tempo">+</button></div></div>
+      <label class="drum-enable bass-toggle"><input id="bassBoost" type="checkbox"><span>Bass boost</span></label>
+    </section>
+
+    <div class="study-caption">
+      <p class="test-label">CHILLWAVE · MELODY STUDY</p>
+      <p class="test-description">A slowly evolving four-chord pad, conversational melody, and relaxed adjustable drum groove.</p>
+    </div>
 
     <section id="diagnostics" class="diagnostics" hidden>
       <div class="section-heading">Diagnostics</div>
+      <div class="diagnostic-actions">
+        <button id="hardResetButton" class="danger-button" type="button">Hard reset</button>
+      </div>
       <div class="diagnostic-grid">
         <span>Audio context</span><strong id="ctxState">Not created</strong>
         <span>Sample rate</span><strong id="sampleRate">—</strong>
@@ -94,9 +90,6 @@
         <span>Scheduler</span><strong id="schedulerState">Stopped</strong>
         <span>Media keepalive</span><strong id="keepaliveState">Stopped</strong>
         <span>Service worker</span><strong id="swState">Checking…</strong>
-      </div>
-      <div class="diagnostic-actions">
-        <button id="hardResetButton" class="danger-button" type="button">Hard reset</button>
       </div>
       <p id="logOutput" class="reset-note" aria-live="polite">Event logging is off. Diagnostics show live playback-system status only.</p>
       <p class="reset-note">Hard reset unregisters PulseForge's service worker, clears its offline cache, and reloads a fresh copy from the server. Internet access is required.</p>

@@ -2,7 +2,7 @@ import { AudioEngine } from "./audio-engine.js";
 import { PlaybackScheduler } from "./playback.js";
 import { configureMediaSession, setMediaPlaybackState } from "./media-session.js";
 
-const BUILD_STAMP = "261112-1808";
+const BUILD_STAMP = "261112-1940";
 const CACHE_PREFIX = "pulseforge-";
 const $ = id => document.getElementById(id);
 
@@ -73,25 +73,47 @@ $("padShape").addEventListener("change", event => {
 $("melodyShape").addEventListener("change", event => {
   engine.setMelodyShape(event.target.value);
 });
-const melodyDensity = $("melodyDensity");
-const melodyDensityValue = $("melodyDensityValue");
-const updateMelodyDensity = value => {
-  engine.setMelodyDensity(value);
-  melodyDensityValue.textContent = `${value}%`;
+const stepperValues = {
+  padVolume: 100,
+  melodyVolume: 100,
+  melodyDensity: 50,
+  kickLevel: 65,
+  snareLevel: 45,
+  hatLevel: 22,
+  bpm: 60
 };
-melodyDensity.addEventListener("input", event => updateMelodyDensity(event.target.value));
-updateMelodyDensity(melodyDensity.value);
-
-["kick", "snare", "hat"].forEach(instrument => {
-  const slider = $(`${instrument}Level`);
-  const output = $(`${instrument}Value`);
-  const update = value => {
-    engine.setDrumLevel(instrument, Number(value) / 100);
-    output.textContent = `${value}%`;
+const stepperBounds = {
+  padVolume: [0, 150], melodyVolume: [0, 150], melodyDensity: [0, 100],
+  kickLevel: [0, 100], snareLevel: [0, 100], hatLevel: [0, 100], bpm: [40, 120]
+};
+const stepperLabels = { bpm: value => `${value} BPM`, default: value => `${value}%` };
+function updateStepper(name, value) {
+  const [min, max] = stepperBounds[name];
+  const next = Math.max(min, Math.min(max, value));
+  stepperValues[name] = next;
+  const outputIds = {
+    padVolume: "padVolumeValue", melodyVolume: "melodyVolumeValue", melodyDensity: "melodyDensityValue",
+    kickLevel: "kickValue", snareLevel: "snareValue", hatLevel: "hatValue", bpm: "bpmValue"
   };
-  slider.addEventListener("input", event => update(event.target.value));
-  update(slider.value);
+  $(outputIds[name]).textContent = name === "bpm" ? stepperLabels.bpm(next) : `${next}%`;
+  switch (name) {
+    case "padVolume": engine.setPadVolume(next); break;
+    case "melodyVolume": engine.setMelodyVolume(next); break;
+    case "melodyDensity": engine.setMelodyDensity(next); break;
+    case "kickLevel": engine.setDrumLevel("kick", next / 100); break;
+    case "snareLevel": engine.setDrumLevel("snare", next / 100); break;
+    case "hatLevel": engine.setDrumLevel("hat", next / 100); break;
+    case "bpm": engine.setBpm(next); scheduler.setBpm(next); break;
+  }
+}
+document.querySelectorAll(".stepper[data-control]").forEach(stepper => {
+  const name = stepper.dataset.control;
+  stepper.querySelectorAll("button[data-delta]").forEach(button => {
+    button.addEventListener("click", () => updateStepper(name, stepperValues[name] + Number(button.dataset.delta)));
+  });
+  updateStepper(name, stepperValues[name]);
 });
+$("bassBoost").addEventListener("change", event => engine.setBassBoost(event.target.checked));
 
 $("playButton").addEventListener("click", () => engine.playing ? stop() : start());
 $("buildStamp").addEventListener("click", () => {

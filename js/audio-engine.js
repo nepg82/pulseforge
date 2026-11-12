@@ -32,9 +32,17 @@ export class AudioEngine {
     this.context = null;
     this.master = null;
     this.filter = null;
+    this.bassShelf = null;
+    this.padBus = null;
+    this.melodyBus = null;
+    this.drumBus = null;
     this.compressor = null;
     this.noiseBuffer = null;
     this.drumLevels = { kick: 0.65, snare: 0.45, hat: 0.22 };
+    this.padVolume = 1;
+    this.melodyVolume = 1;
+    this.bpm = 60;
+    this.bassBoost = false;
     this.padShape = "blend";
     this.melodyShape = "sine";
     this.melodyDensity = 50;
@@ -72,7 +80,20 @@ export class AudioEngine {
       this.filter = this.context.createBiquadFilter();
       this.filter.type = "lowpass";
       this.filter.frequency.value = 14000;
-      this.filter.connect(this.compressor);
+      this.bassShelf = this.context.createBiquadFilter();
+      this.bassShelf.type = "lowshelf";
+      this.bassShelf.frequency.value = 120;
+      this.bassShelf.gain.value = this.bassBoost ? 3 : 0;
+      this.filter.connect(this.bassShelf).connect(this.compressor);
+      this.padBus = this.context.createGain();
+      this.melodyBus = this.context.createGain();
+      this.drumBus = this.context.createGain();
+      this.padBus.gain.value = this.padVolume;
+      this.melodyBus.gain.value = this.melodyVolume;
+      this.drumBus.gain.value = 1;
+      this.padBus.connect(this.filter);
+      this.melodyBus.connect(this.filter);
+      this.drumBus.connect(this.filter);
       this.noiseBuffer = this.context.createBuffer(1, this.context.sampleRate, this.context.sampleRate);
       const noiseData = this.noiseBuffer.getChannelData(0);
       for (let i = 0; i < noiseData.length; i++) noiseData[i] = Math.random() * 2 - 1;
@@ -156,11 +177,10 @@ export class AudioEngine {
       [55, 59, 62, 64, 69]  // G3 B3 D4 E4 A4
     ];
     const notes = progression[chordIndex % progression.length];
-    const duration = 4.6;
-    const attack = 0.7;
-    // Hold the chord until the next measure, then crossfade over 0.6 seconds.
-    const releaseStart = 4.0;
-    const releaseEnd = duration;
+    const measureSeconds = 240 / this.bpm;
+    const releaseStart = measureSeconds;
+    const releaseEnd = measureSeconds + 0.6;
+    const attack = Math.min(0.7, measureSeconds * 0.18);
 
     for (const midi of notes) {
       const frequency = 440 * Math.pow(2, (midi - 69) / 12);
@@ -178,7 +198,7 @@ export class AudioEngine {
         amp.gain.exponentialRampToValueAtTime(layer.level, time + attack);
         amp.gain.setValueAtTime(layer.level, time + releaseStart);
         amp.gain.exponentialRampToValueAtTime(0.0001, time + releaseEnd);
-        osc.connect(amp).connect(this.filter);
+        osc.connect(amp).connect(this.padBus);
         osc.start(time);
         osc.stop(time + releaseEnd + 0.03);
         osc.addEventListener("ended", () => { osc.disconnect(); amp.disconnect(); }, { once: true });
@@ -199,16 +219,34 @@ export class AudioEngine {
     this.melodyDensity = Math.max(0, Math.min(100, Number(value) || 0));
   }
 
+  setPadVolume(value) {
+    this.padVolume = Math.max(0, Math.min(1, Number(value) / 100));
+    if (this.padBus && this.context) this.padBus.gain.setTargetAtTime(this.padVolume, this.context.currentTime, 0.025);
+  }
+
+  setMelodyVolume(value) {
+    this.melodyVolume = Math.max(0, Math.min(1, Number(value) / 100));
+    if (this.melodyBus && this.context) this.melodyBus.gain.setTargetAtTime(this.melodyVolume, this.context.currentTime, 0.025);
+  }
+
+  setBpm(value) {
+    this.bpm = Math.max(40, Math.min(120, Number(value) || 60));
+  }
+
+  setBassBoost(enabled) {
+    this.bassBoost = Boolean(enabled);
+    if (this.bassShelf && this.context) this.bassShelf.gain.setTargetAtTime(this.bassBoost ? 3 : 0, this.context.currentTime, 0.04);
+  }
+
   scheduleMelodyStep(step, time, chordIndex = 0) {
     if (!this.context || !this.filter || this.yielded) return;
     const position = step % 16;
     if (position === 0) this.melodyMeasure++;
-    let rhythm;
-    if (this.melodyDensity < 34) rhythm = [0, 8, 12];
-    else if (this.melodyDensity < 68) rhythm = [0, 4, 8, 12, 14];
-    else rhythm = [0, 3, 4, 6, 8, 11, 12, 14];
-    const eventIndex = rhythm.indexOf(position);
-    if (eventIndex < 0) return;
+    const eventCount = Math.round(this.melodyDensity / 100 * 16);
+    if (eventCount === 0) return;
+    const eventIndex = Math.floor(position * eventCount / 16);
+    const isNote = Math.floor((position + 1) * eventCount / 16) > Math.floor(position * eventCount / 16);
+    if (!isNote) return;
 
     // Four-bar conversational phrase: chord tones anchor the beats; offbeats
     // occasionally use neighboring notes from the shared C-major/A-minor scale.
@@ -226,12 +264,14 @@ export class AudioEngine {
     ];
     const bar = (this.melodyMeasure - 1) % 4;
     const motif = phrase[bar];
-    const motifIndex = Math.min(motif.length - 1, Math.floor(eventIndex * motif.length / rhythm.length));
-    let midi = chordNotes[motif[motifIndex] % chordNotes.length];
+    const motifIndex = Math.min(motif.length - 1, Math.floor(eventIndex * motif.length / eventCount));
+    let midi = this.melodyDensity >= 80
+      ? chordNotes[(eventIndex + bar) % chordNotes.length]
+      : chordNotes[motif[motifIndex] % chordNotes.length];
 
     // A few offbeat notes lean by a diatonic step, keeping the line fluid
     // rather than simply arpeggiating each chord.
-    if (position % 4 !== 0 && eventIndex % 3 === 1) {
+    if (this.melodyDensity < 80 && position % 4 !== 0 && eventIndex % 3 === 1) {
       const scale = [0, 2, 4, 5, 7, 9, 11];
       const pc = midi % 12;
       const scaleIndex = scale.indexOf(pc);
@@ -249,12 +289,15 @@ export class AudioEngine {
     osc.type = this.melodyShape;
     osc.frequency.setValueAtTime(440 * Math.pow(2, (midi - 69) / 12), time);
     const peak = this.melodyShape === "triangle" ? 0.028 : 0.038;
-    const duration = position === 0 || position === 8 ? 0.48 : 0.34;
+    const stepSeconds = 60 / this.bpm / 4;
+    const duration = stepSeconds * 1.65;
+    const attack = Math.min(0.065, stepSeconds * 0.32);
+    const releaseStart = duration - Math.min(0.14, stepSeconds * 0.55);
     amp.gain.setValueAtTime(0.0001, time);
-    amp.gain.exponentialRampToValueAtTime(peak, time + 0.035);
-    amp.gain.setValueAtTime(peak * 0.78, time + 0.11);
+    amp.gain.exponentialRampToValueAtTime(peak, time + attack);
+    amp.gain.setValueAtTime(peak * 0.9, time + Math.max(attack + 0.01, releaseStart));
     amp.gain.exponentialRampToValueAtTime(0.0001, time + duration);
-    osc.connect(amp).connect(this.filter);
+    osc.connect(amp).connect(this.melodyBus);
     osc.start(time);
     osc.stop(time + duration + 0.02);
     osc.addEventListener("ended", () => { osc.disconnect(); amp.disconnect(); }, { once: true });
@@ -310,7 +353,7 @@ export class AudioEngine {
     amp.gain.setValueAtTime(0.0001, time);
     amp.gain.exponentialRampToValueAtTime(0.28 * level * velocity, time + 0.006);
     amp.gain.exponentialRampToValueAtTime(0.0001, time + 0.30);
-    osc.connect(amp).connect(this.filter);
+    osc.connect(amp).connect(this.drumBus);
     osc.start(time);
     osc.stop(time + 0.32);
     osc.addEventListener("ended", () => { osc.disconnect(); amp.disconnect(); }, { once: true });
@@ -335,8 +378,8 @@ export class AudioEngine {
     toneAmp.gain.setValueAtTime(0.0001, time);
     toneAmp.gain.exponentialRampToValueAtTime(0.055 * level * velocity, time + 0.003);
     toneAmp.gain.exponentialRampToValueAtTime(0.0001, time + 0.12);
-    noise.connect(noiseFilter).connect(noiseAmp).connect(this.filter);
-    tone.connect(toneAmp).connect(this.filter);
+    noise.connect(noiseFilter).connect(noiseAmp).connect(this.drumBus);
+    tone.connect(toneAmp).connect(this.drumBus);
     noise.start(time);
     noise.stop(time + 0.20);
     tone.start(time);
@@ -357,7 +400,7 @@ export class AudioEngine {
     amp.gain.setValueAtTime(0.0001, time);
     amp.gain.exponentialRampToValueAtTime(0.052 * level * velocity, time + 0.002);
     amp.gain.exponentialRampToValueAtTime(0.0001, time + 0.055);
-    noise.connect(highpass).connect(amp).connect(this.filter);
+    noise.connect(highpass).connect(amp).connect(this.drumBus);
     noise.start(time);
     noise.stop(time + 0.06);
     noise.addEventListener("ended", () => {
@@ -418,6 +461,6 @@ export class AudioEngine {
     this.keepaliveUrl = null;
     if (this.context && this.context.state !== "closed") await this.context.close();
     this.context = null;
-    this.master = this.filter = this.compressor = this.noiseBuffer = null;
+    this.master = this.filter = this.bassShelf = this.padBus = this.melodyBus = this.drumBus = this.compressor = this.noiseBuffer = null;
   }
 }

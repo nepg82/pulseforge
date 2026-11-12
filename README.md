@@ -69,3 +69,13 @@ When changing the offline app shell, increment `CACHE_NAME` in `sw.js` (currentl
 - Melody defaults to on, sine waveform, and 50% density.
 - Drum groove, kick pitch, pad waveform options, pad timing, and playback architecture remain unchanged.
 - Service-worker cache bumped to v0.4.0.
+
+
+## v0.4.1
+
+- Replaced all range sliders with compact +/- steppers for pad, melody, kick, snare, hi-hat, and melody density.
+- Added tempo control (40–120 BPM, 5 BPM increments) and an optional +3 dB low-shelf bass boost (off by default).
+- Added independent pad and melody volume controls; defaults preserve the previous mix.
+- Melody density now spans the full 16-step pattern: 100% plays every step as a chord-tone arpeggio. Notes have longer, smoother envelopes for a more legato line.
+- Removed the decorative pulse mark, moved the study caption below the controls, and moved Hard reset to the top of expanded diagnostics.
+- Pad measure length and scheduler timing now follow the selected BPM.

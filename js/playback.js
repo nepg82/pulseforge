@@ -12,9 +12,15 @@ export class PlaybackScheduler {
     this.workerUrl = null;
     this.fallbackTimer = null;
     this.running = false;
+    this.stepSeconds = STEP_SECONDS;
     this.step = 0;
     this.nextTime = 0;
     this.tick = this.tick.bind(this);
+  }
+
+  setBpm(bpm) {
+    const safe = Math.max(40, Math.min(120, Number(bpm) || 60));
+    this.stepSeconds = 60 / safe / 4;
   }
 
   start() {
@@ -58,7 +64,7 @@ export class PlaybackScheduler {
     while (this.nextTime < now + LOOKAHEAD_SECONDS) {
       try { this.scheduleStep(this.step, this.nextTime); }
       catch (error) { this.onLog(`Scheduler step ${this.step} failed: ${error.message}`); }
-      this.nextTime += STEP_SECONDS;
+      this.nextTime += this.stepSeconds;
       this.step = (this.step + 1) % 16;
     }
   }
