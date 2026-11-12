@@ -53,3 +53,10 @@ When changing the offline app shell, increment `CACHE_NAME` in `sw.js` (currentl
 - Raised the kick pitch contour (148 Hz down to 68 Hz) to reduce sub-bass weight without changing its level.
 - Corrected the drum pulse to a true 60 BPM, aligned with the four-second pad measure.
 - Added restrained syncopation: quiet anticipatory kick/snare notes and softer offbeat hi-hats.
+
+
+## 0.3.4
+- Restored the original kick pitch sweep (118 Hz down to 46 Hz).
+- Preserved the 60 BPM syncopated drum groove from 0.3.3.
+- Added a pad waveform selector: Sine + Triangle (default), Sine, or Triangle.
+- Bumped the service-worker cache to v0.3.4.

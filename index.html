@@ -18,7 +18,7 @@
     <header class="app-header">
       <div class="eyebrow">GENERATIVE AUDIO</div>
       <h1>PulseForge</h1>
-      <button id="buildStamp" class="build-stamp" type="button" aria-expanded="false" aria-controls="diagnostics">261112-1755</button>
+      <button id="buildStamp" class="build-stamp" type="button" aria-expanded="false" aria-controls="diagnostics">261112-1302</button>
     </header>
 
     <section class="player-card" aria-label="Chillwave music preview">
@@ -27,6 +27,20 @@
       <p class="test-label">CHILLWAVE · RHYTHM STUDY</p>
       <p class="test-description">A slowly evolving four-chord pad with a relaxed, adjustable drum groove.</p>
       <button id="playButton" class="play-button" type="button">Start music</button>
+    </section>
+
+    <section class="drum-controls pad-controls" aria-label="Pad controls">
+      <div class="controls-heading">
+        <div class="section-heading">Pad shape</div>
+        <label class="pad-shape-select" for="padShape">
+          <span class="visually-hidden">Pad waveform</span>
+          <select id="padShape">
+            <option value="blend" selected>Sine + Triangle</option>
+            <option value="sine">Sine</option>
+            <option value="triangle">Triangle</option>
+          </select>
+        </label>
+      </div>
     </section>
 
     <section class="drum-controls" aria-label="Drum controls">

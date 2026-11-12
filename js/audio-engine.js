@@ -35,6 +35,7 @@ export class AudioEngine {
     this.compressor = null;
     this.noiseBuffer = null;
     this.drumLevels = { kick: 0.65, snare: 0.45, hat: 0.22 };
+    this.padShape = "blend";
     this.keepalive = null;
     this.keepaliveUrl = null;
     this.playing = false;
@@ -160,37 +161,31 @@ export class AudioEngine {
 
     for (const midi of notes) {
       const frequency = 440 * Math.pow(2, (midi - 69) / 12);
-      const sine = this.context.createOscillator();
-      const triangle = this.context.createOscillator();
-      const sineGain = this.context.createGain();
-      const triangleGain = this.context.createGain();
-
-      sine.type = "sine";
-      triangle.type = "triangle";
-      sine.frequency.setValueAtTime(frequency, time);
-      triangle.frequency.setValueAtTime(frequency, time);
-
-      for (const gain of [sineGain.gain, triangleGain.gain]) {
-        gain.setValueAtTime(0.0001, time);
-        gain.exponentialRampToValueAtTime(gain === sineGain.gain ? 0.09 : 0.022, time + attack);
-        gain.setValueAtTime(gain === sineGain.gain ? 0.09 : 0.022, time + releaseStart);
-        gain.exponentialRampToValueAtTime(0.0001, time + releaseEnd);
-      }
-
-      sine.connect(sineGain).connect(this.filter);
-      triangle.connect(triangleGain).connect(this.filter);
-      sine.start(time);
-      triangle.start(time);
-      sine.stop(time + releaseEnd + 0.03);
-      triangle.stop(time + releaseEnd + 0.03);
-      const cleanup = () => {
-        sine.disconnect();
-        triangle.disconnect();
-        sineGain.disconnect();
-        triangleGain.disconnect();
-      };
-      sine.addEventListener("ended", cleanup, { once: true });
+      const layers = this.padShape === "sine"
+        ? [{ type: "sine", level: 0.112 }]
+        : this.padShape === "triangle"
+          ? [{ type: "triangle", level: 0.112 }]
+          : [{ type: "sine", level: 0.09 }, { type: "triangle", level: 0.022 }];
+      const voices = layers.map(layer => {
+        const osc = this.context.createOscillator();
+        const amp = this.context.createGain();
+        osc.type = layer.type;
+        osc.frequency.setValueAtTime(frequency, time);
+        amp.gain.setValueAtTime(0.0001, time);
+        amp.gain.exponentialRampToValueAtTime(layer.level, time + attack);
+        amp.gain.setValueAtTime(layer.level, time + releaseStart);
+        amp.gain.exponentialRampToValueAtTime(0.0001, time + releaseEnd);
+        osc.connect(amp).connect(this.filter);
+        osc.start(time);
+        osc.stop(time + releaseEnd + 0.03);
+        osc.addEventListener("ended", () => { osc.disconnect(); amp.disconnect(); }, { once: true });
+        return osc;
+      });
     }
+  }
+
+  setPadShape(shape) {
+    if (["blend", "sine", "triangle"].includes(shape)) this.padShape = shape;
   }
 
   setDrumLevel(instrument, value) {
@@ -238,8 +233,8 @@ export class AudioEngine {
     const osc = this.context.createOscillator();
     const amp = this.context.createGain();
     osc.type = "sine";
-    osc.frequency.setValueAtTime(148, time);
-    osc.frequency.exponentialRampToValueAtTime(68, time + 0.17);
+    osc.frequency.setValueAtTime(118, time);
+    osc.frequency.exponentialRampToValueAtTime(46, time + 0.17);
     amp.gain.setValueAtTime(0.0001, time);
     amp.gain.exponentialRampToValueAtTime(0.28 * level * velocity, time + 0.006);
     amp.gain.exponentialRampToValueAtTime(0.0001, time + 0.30);

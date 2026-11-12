@@ -2,7 +2,7 @@ import { AudioEngine } from "./audio-engine.js";
 import { PlaybackScheduler } from "./playback.js";
 import { configureMediaSession, setMediaPlaybackState } from "./media-session.js";
 
-const BUILD_STAMP = "261112-1755";
+const BUILD_STAMP = "261112-1802";
 const CACHE_PREFIX = "pulseforge-";
 const $ = id => document.getElementById(id);
 
@@ -65,6 +65,10 @@ async function stop(reason = "user") {
   setPlayingUI(false);
   updateDiagnostics();
 }
+
+$("padShape").addEventListener("change", event => {
+  engine.setPadShape(event.target.value);
+});
 
 ["kick", "snare", "hat"].forEach(instrument => {
   const slider = $(`${instrument}Level`);

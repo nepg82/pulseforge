@@ -64,3 +64,5 @@ footer { color: var(--muted); font-size: .68rem; text-align: center; letter-spac
   .pulse-mark span:nth-child(3) { animation: pulse 1s ease-in-out infinite; }
   @keyframes pulse { 50% { transform: scaleY(.72); opacity: .5; } }
 }
+.pad-shape-select select { min-height: 36px; padding: 0 30px 0 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); font: inherit; font-size: .78rem; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
