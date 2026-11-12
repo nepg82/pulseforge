@@ -68,7 +68,7 @@ export class AudioEngine {
       this.filter.frequency.value = 14000;
       this.filter.connect(this.compressor);
       this.master = this.context.createGain();
-      this.master.gain.value = 0.18;
+      this.master.gain.value = 0.3;
       this.compressor.connect(this.master).connect(this.context.destination);
       this.context.addEventListener("statechange", () => {
         this.onLog(`AudioContext state: ${this.context.state}`);
@@ -132,7 +132,7 @@ export class AudioEngine {
 
   setAudible(enabled) {
     if (!this.master || !this.context) return;
-    this.master.gain.setTargetAtTime(enabled ? 0.18 : 0, this.context.currentTime, 0.04);
+    this.master.gain.setTargetAtTime(enabled ? 0.3 : 0, this.context.currentTime, 0.04);
   }
 
   scheduleReferencePulse(time, frequency = 220) {
@@ -142,7 +142,7 @@ export class AudioEngine {
     oscillator.type = "sine";
     oscillator.frequency.setValueAtTime(frequency, time);
     envelope.gain.setValueAtTime(0.0001, time);
-    envelope.gain.exponentialRampToValueAtTime(0.12, time + 0.018);
+    envelope.gain.exponentialRampToValueAtTime(0.3, time + 0.018);
     envelope.gain.exponentialRampToValueAtTime(0.0001, time + 0.24);
     oscillator.connect(envelope).connect(this.filter);
     oscillator.start(time);

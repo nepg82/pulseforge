@@ -2,27 +2,19 @@ import { AudioEngine } from "./audio-engine.js";
 import { PlaybackScheduler } from "./playback.js";
 import { configureMediaSession, setMediaPlaybackState } from "./media-session.js";
 
-const BUILD_STAMP = "261112-1554";
-const LOG_KEY = "pulseforge-diagnostics-v1";
+const BUILD_STAMP = "261112-1608";
 const CACHE_PREFIX = "pulseforge-";
 const $ = id => document.getElementById(id);
 
-let logEntries = [];
-try { logEntries = JSON.parse(localStorage.getItem(LOG_KEY) || "[]"); } catch (_) {}
-function log(message) {
-  const stamp = new Date().toLocaleString("sv-SE").replace("T", " ");
-  logEntries.push(`${stamp} ${message}`);
-  if (logEntries.length > 500) logEntries.splice(0, logEntries.length - 500);
-  try { localStorage.setItem(LOG_KEY, JSON.stringify(logEntries)); } catch (_) {}
-  if (!$("diagnostics").hidden) renderLog();
-}
-function renderLog() { $("logOutput").textContent = logEntries.slice(-80).reverse().join("\n"); }
+// Event logging is intentionally disabled during normal development.
+// Restore a logger here when actively investigating a specific issue.
+function log(_message) {}
 
 const engine = new AudioEngine({ onLog: log, onState: updateDiagnostics });
 const scheduler = new PlaybackScheduler({
   getContext: () => engine.context,
   scheduleStep: (step, time) => {
-    // Temporary, deliberately quiet reference pulse. The musical sequencer comes later.
+    // Temporary reference pulse. The musical sequencer comes later.
     if (step % 4 === 0) engine.scheduleReferencePulse(time, step % 16 === 8 ? 247 : 220);
   },
   onLog: log,
@@ -74,20 +66,12 @@ $("buildStamp").addEventListener("click", () => {
   panel.hidden = !panel.hidden;
   $("buildStamp").setAttribute("aria-expanded", String(!panel.hidden));
   if (!panel.hidden) {
-    renderLog();
+    $("logOutput").textContent = "Event logging is disabled. Live engine diagnostics remain available above.";
     updateDiagnostics();
     updateServiceWorkerStatus();
   }
 });
-$("copyLogButton").addEventListener("click", async () => {
-  const content = logEntries.join("\n");
-  try {
-    await navigator.clipboard.writeText(content);
-    log("Diagnostic log copied.");
-  } catch (_) {
-    log("Clipboard unavailable; select the visible log manually.");
-  }
-});
+
 
 async function hardReset() {
   if (!confirm("Unregister PulseForge's service worker, clear its offline cache, and reload from the server? Internet access is required.")) return;

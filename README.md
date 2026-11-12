@@ -6,8 +6,8 @@ This is the first clean PulseForge scaffold. It intentionally does not contain t
 
 1. Copy your existing `app-icons/app-icon-192.png` and `app-icons/app-icon-512.png` into this project's `app-icons/` folder.
 2. Serve this folder from a local web server (ES modules and service workers do not work reliably from `file://`). For example, use the same local server workflow you use for your other PWAs.
-3. Open `index.html`. Tap **Start test** and confirm the quiet reference pulse plays.
-4. Tap the build stamp (`261112-1554`) to open diagnostics. The stamp can be updated for each build.
+3. Open `index.html`. Tap **Start test** and confirm the reference pulse plays at a moderate test level.
+4. Tap the build stamp (`261112-1608`) to open live diagnostics. The stamp can be updated for each build.
 
 ## Included foundation
 
@@ -16,7 +16,7 @@ This is the first clean PulseForge scaffold. It intentionally does not contain t
 - Worker-driven scheduler: 50 ms wake interval, 500 ms audio-clock look-ahead, with a timer fallback.
 - Near-silent looping WAV media keepalive, based on the working Chillforge approach.
 - Media Session play/pause/stop actions for lock-screen and Bluetooth controls.
-- Visibility/freeze/resume diagnostics and context recovery attempts.
+- Live engine diagnostics and context recovery attempts; event logging and log storage are disabled by default.
 - Offline app-shell service worker.
 - Build stamp opens diagnostics; Hard reset unregisters this app's service worker, clears only PulseForge caches, and reloads with a unique URL.
 

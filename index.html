@@ -18,7 +18,7 @@
     <header class="app-header">
       <div class="eyebrow">GENERATIVE AUDIO</div>
       <h1>PulseForge</h1>
-      <button id="buildStamp" class="build-stamp" type="button" aria-expanded="false" aria-controls="diagnostics">261112-1554</button>
+      <button id="buildStamp" class="build-stamp" type="button" aria-expanded="false" aria-controls="diagnostics">261112-1608</button>
     </header>
 
     <section class="player-card" aria-label="Audio engine test">
@@ -41,10 +41,9 @@
         <span>Service worker</span><strong id="swState">Checking…</strong>
       </div>
       <div class="diagnostic-actions">
-        <button id="copyLogButton" class="secondary-button" type="button">Copy log</button>
         <button id="hardResetButton" class="danger-button" type="button">Hard reset</button>
       </div>
-      <pre id="logOutput" class="log-output" aria-live="polite"></pre>
+      <p id="logOutput" class="reset-note" aria-live="polite">Event logging is disabled. Live engine diagnostics remain available above.</p>
       <p class="reset-note">Hard reset unregisters PulseForge's service worker, clears its offline cache, and reloads a fresh copy from the server. Internet access is required.</p>
     </section>
 
