@@ -178,8 +178,10 @@ export class AudioEngine {
     ];
     const notes = progression[chordIndex % progression.length];
     const measureSeconds = 240 / this.bpm;
-    const releaseStart = measureSeconds;
-    const releaseEnd = measureSeconds + 0.6;
+    // Let the outgoing chord linger into the next measure so the new
+    // chord can arrive underneath it instead of exposing a gap.
+    const releaseStart = measureSeconds + 0.45;
+    const releaseEnd = measureSeconds + 1.25;
     const attack = Math.min(0.7, measureSeconds * 0.18);
 
     for (const midi of notes) {
@@ -246,10 +248,10 @@ export class AudioEngine {
     // Phrase-based melody: deliberately chosen rhythmic slots create musical
     // sentences with rests, rather than filling a sixteenth-note grid.
     const rhythmicPhrases = [
-      [0, 2, 5, 8, 11, 14],       // establish, rise, answer
-      [1, 4, 6, 9, 12, 15],       // pickup and a little syncopation
-      [0, 3, 5, 7, 10, 13, 15],  // more active middle phrase
-      [0, 4, 7, 10, 12]           // leave room for resolution
+      [0, 2, 4, 5, 8, 10, 11, 14],       // establish, rise, answer
+      [1, 3, 4, 6, 9, 11, 12, 15],       // pickup and syncopated response
+      [0, 2, 3, 5, 7, 8, 10, 13, 15],    // busier middle phrase
+      [0, 3, 4, 7, 10, 12]               // leave room for resolution
     ];
     const bar = (this.melodyMeasure - 1) % 4;
     const candidates = rhythmicPhrases[bar];
@@ -272,10 +274,10 @@ export class AudioEngine {
       [67, 71, 74, 76, 81]        // G6/9
     ][chordIndex % 4];
     const contours = [
-      [1, 2, 3, 2, 1, 0, 1],
-      [2, 1, 0, 1, 2, 3, 2],
-      [0, 1, 2, 3, 4, 3, 2],
-      [2, 3, 2, 1, 0, 1, 0]
+      [1, 2, 3, 2, 3, 2, 1, 0, 1],
+      [2, 1, 0, 1, 2, 1, 2, 3, 2],
+      [0, 1, 2, 3, 4, 3, 4, 3, 2],
+      [2, 3, 2, 1, 0, 1, 0, 1, 0]
     ];
     const phraseIndex = candidates.indexOf(position);
     let noteIndex = contours[bar][Math.max(0, phraseIndex)] % chordNotes.length;
