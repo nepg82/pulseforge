@@ -1,4 +1,4 @@
-const CACHE_NAME = "pulseforge-shell-v0.3.4";
+const CACHE_NAME = "pulseforge-shell-v0.4.0";
 const APP_SHELL = [
   "./",
   "./index.html",

@@ -2,7 +2,7 @@ import { AudioEngine } from "./audio-engine.js";
 import { PlaybackScheduler } from "./playback.js";
 import { configureMediaSession, setMediaPlaybackState } from "./media-session.js";
 
-const BUILD_STAMP = "261112-1802";
+const BUILD_STAMP = "261112-1808";
 const CACHE_PREFIX = "pulseforge-";
 const $ = id => document.getElementById(id);
 
@@ -20,6 +20,7 @@ const scheduler = new PlaybackScheduler({
       engine.schedulePadChord(time, chordIndex % 4);
       chordIndex++;
     }
+    if ($("melodyEnabled").checked) engine.scheduleMelodyStep(step, time, (chordIndex + 3) % 4);
     if ($("drumsEnabled").checked) engine.scheduleDrumStep(step, time);
   },
   onLog: log,
@@ -69,6 +70,17 @@ async function stop(reason = "user") {
 $("padShape").addEventListener("change", event => {
   engine.setPadShape(event.target.value);
 });
+$("melodyShape").addEventListener("change", event => {
+  engine.setMelodyShape(event.target.value);
+});
+const melodyDensity = $("melodyDensity");
+const melodyDensityValue = $("melodyDensityValue");
+const updateMelodyDensity = value => {
+  engine.setMelodyDensity(value);
+  melodyDensityValue.textContent = `${value}%`;
+};
+melodyDensity.addEventListener("input", event => updateMelodyDensity(event.target.value));
+updateMelodyDensity(melodyDensity.value);
 
 ["kick", "snare", "hat"].forEach(instrument => {
   const slider = $(`${instrument}Level`);

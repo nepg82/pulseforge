@@ -18,14 +18,14 @@
     <header class="app-header">
       <div class="eyebrow">GENERATIVE AUDIO</div>
       <h1>PulseForge</h1>
-      <button id="buildStamp" class="build-stamp" type="button" aria-expanded="false" aria-controls="diagnostics">261112-1302</button>
+      <button id="buildStamp" class="build-stamp" type="button" aria-expanded="false" aria-controls="diagnostics">261112-1308</button>
     </header>
 
     <section class="player-card" aria-label="Chillwave music preview">
       <div class="status-line"><span id="statusDot" class="status-dot"></span><span id="statusText">Ready</span></div>
       <div class="pulse-mark" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
-      <p class="test-label">CHILLWAVE · RHYTHM STUDY</p>
-      <p class="test-description">A slowly evolving four-chord pad with a relaxed, adjustable drum groove.</p>
+      <p class="test-label">CHILLWAVE · MELODY STUDY</p>
+      <p class="test-description">A slowly evolving four-chord pad, conversational melody, and relaxed adjustable drum groove.</p>
       <button id="playButton" class="play-button" type="button">Start music</button>
     </section>
 
@@ -40,6 +40,25 @@
             <option value="triangle">Triangle</option>
           </select>
         </label>
+      </div>
+    </section>
+
+    <section class="drum-controls" aria-label="Melody controls">
+      <div class="controls-heading">
+        <div class="section-heading">Melody</div>
+        <label class="drum-enable"><input id="melodyEnabled" type="checkbox" checked><span>On</span></label>
+      </div>
+      <div class="controls-heading melody-options">
+        <label class="melody-shape-select" for="melodyShape">Waveform</label>
+        <select id="melodyShape">
+          <option value="sine" selected>Sine</option>
+          <option value="triangle">Triangle</option>
+        </select>
+      </div>
+      <div class="level-control">
+        <label for="melodyDensity">Density</label>
+        <input id="melodyDensity" type="range" min="0" max="100" step="1" value="50">
+        <output id="melodyDensityValue" for="melodyDensity">50%</output>
       </div>
     </section>
 

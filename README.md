@@ -60,3 +60,12 @@ When changing the offline app shell, increment `CACHE_NAME` in `sw.js` (currentl
 - Preserved the 60 BPM syncopated drum groove from 0.3.3.
 - Added a pad waveform selector: Sine + Triangle (default), Sine, or Triangle.
 - Bumped the service-worker cache to v0.3.4.
+
+
+## 0.4.0 – Melody foundation
+- Added a generated melodic line tied to the current chord progression, with chord tones on strong beats and occasional diatonic passing movement.
+- Added four-bar phrase contour and motif variation, with rests and adjustable note density.
+- Added melody on/off, density, and sine/triangle waveform controls.
+- Melody defaults to on, sine waveform, and 50% density.
+- Drum groove, kick pitch, pad waveform options, pad timing, and playback architecture remain unchanged.
+- Service-worker cache bumped to v0.4.0.

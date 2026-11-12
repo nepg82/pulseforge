@@ -36,6 +36,9 @@ export class AudioEngine {
     this.noiseBuffer = null;
     this.drumLevels = { kick: 0.65, snare: 0.45, hat: 0.22 };
     this.padShape = "blend";
+    this.melodyShape = "sine";
+    this.melodyDensity = 50;
+    this.melodyMeasure = 0;
     this.keepalive = null;
     this.keepaliveUrl = null;
     this.playing = false;
@@ -186,6 +189,75 @@ export class AudioEngine {
 
   setPadShape(shape) {
     if (["blend", "sine", "triangle"].includes(shape)) this.padShape = shape;
+  }
+
+  setMelodyShape(shape) {
+    if (["sine", "triangle"].includes(shape)) this.melodyShape = shape;
+  }
+
+  setMelodyDensity(value) {
+    this.melodyDensity = Math.max(0, Math.min(100, Number(value) || 0));
+  }
+
+  scheduleMelodyStep(step, time, chordIndex = 0) {
+    if (!this.context || !this.filter || this.yielded) return;
+    const position = step % 16;
+    if (position === 0) this.melodyMeasure++;
+    let rhythm;
+    if (this.melodyDensity < 34) rhythm = [0, 8, 12];
+    else if (this.melodyDensity < 68) rhythm = [0, 4, 8, 12, 14];
+    else rhythm = [0, 3, 4, 6, 8, 11, 12, 14];
+    const eventIndex = rhythm.indexOf(position);
+    if (eventIndex < 0) return;
+
+    // Four-bar conversational phrase: chord tones anchor the beats; offbeats
+    // occasionally use neighboring notes from the shared C-major/A-minor scale.
+    const chordNotes = [
+      [69, 72, 76, 79, 83],       // Am9: A C E G B
+      [69, 72, 76, 77, 81],       // Fmaj7: A C E F A
+      [67, 71, 72, 76, 79, 81],   // Cmaj9: G B C E G A
+      [67, 71, 74, 76, 81]        // G6/9: G B D E A
+    ][chordIndex % 4];
+    const phrase = [
+      [3, 4, 3, 2, 1, 2, 3, 1],
+      [4, 3, 2, 1, 2, 3, 1, 0],
+      [2, 3, 4, 5, 4, 3, 2, 1],
+      [3, 2, 1, 2, 3, 4, 2, 0]
+    ];
+    const bar = (this.melodyMeasure - 1) % 4;
+    const motif = phrase[bar];
+    const motifIndex = Math.min(motif.length - 1, Math.floor(eventIndex * motif.length / rhythm.length));
+    let midi = chordNotes[motif[motifIndex] % chordNotes.length];
+
+    // A few offbeat notes lean by a diatonic step, keeping the line fluid
+    // rather than simply arpeggiating each chord.
+    if (position % 4 !== 0 && eventIndex % 3 === 1) {
+      const scale = [0, 2, 4, 5, 7, 9, 11];
+      const pc = midi % 12;
+      const scaleIndex = scale.indexOf(pc);
+      if (scaleIndex >= 0) {
+        const neighborIndex = (scaleIndex + (eventIndex % 2 ? 1 : 6)) % scale.length;
+        let neighbor = scale[neighborIndex];
+        if (eventIndex % 2 && neighbor <= pc) neighbor += 12;
+        if (!(eventIndex % 2) && neighbor >= pc) neighbor -= 12;
+        midi = midi - pc + neighbor;
+      }
+    }
+
+    const osc = this.context.createOscillator();
+    const amp = this.context.createGain();
+    osc.type = this.melodyShape;
+    osc.frequency.setValueAtTime(440 * Math.pow(2, (midi - 69) / 12), time);
+    const peak = this.melodyShape === "triangle" ? 0.028 : 0.038;
+    const duration = position === 0 || position === 8 ? 0.48 : 0.34;
+    amp.gain.setValueAtTime(0.0001, time);
+    amp.gain.exponentialRampToValueAtTime(peak, time + 0.035);
+    amp.gain.setValueAtTime(peak * 0.78, time + 0.11);
+    amp.gain.exponentialRampToValueAtTime(0.0001, time + duration);
+    osc.connect(amp).connect(this.filter);
+    osc.start(time);
+    osc.stop(time + duration + 0.02);
+    osc.addEventListener("ended", () => { osc.disconnect(); amp.disconnect(); }, { once: true });
   }
 
   setDrumLevel(instrument, value) {
