@@ -18,15 +18,15 @@
     <header class="app-header">
       <div class="eyebrow">GENERATIVE AUDIO</div>
       <h1>PulseForge</h1>
-      <button id="buildStamp" class="build-stamp" type="button" aria-expanded="false" aria-controls="diagnostics">261112-1608</button>
+      <button id="buildStamp" class="build-stamp" type="button" aria-expanded="false" aria-controls="diagnostics">261112-1615</button>
     </header>
 
-    <section class="player-card" aria-label="Audio engine test">
+    <section class="player-card" aria-label="Chillwave music preview">
       <div class="status-line"><span id="statusDot" class="status-dot"></span><span id="statusText">Ready</span></div>
       <div class="pulse-mark" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
-      <p class="test-label">AUDIO ENGINE CHECK</p>
-      <p class="test-description">A quiet reference pulse for checking playback, background operation, and Bluetooth stability.</p>
-      <button id="playButton" class="play-button" type="button">Start test</button>
+      <p class="test-label">CHILLWAVE · PAD STUDY</p>
+      <p class="test-description">A slowly evolving four-chord pad. This first musical layer is a foundation for the rhythm and melody to come.</p>
+      <button id="playButton" class="play-button" type="button">Start music</button>
     </section>
 
     <section id="diagnostics" class="diagnostics" hidden>
@@ -43,7 +43,7 @@
       <div class="diagnostic-actions">
         <button id="hardResetButton" class="danger-button" type="button">Hard reset</button>
       </div>
-      <p id="logOutput" class="reset-note" aria-live="polite">Event logging is disabled. Live engine diagnostics remain available above.</p>
+      <p id="logOutput" class="reset-note" aria-live="polite">Event logging is off. Diagnostics show live playback-system status only.</p>
       <p class="reset-note">Hard reset unregisters PulseForge's service worker, clears its offline cache, and reloads a fresh copy from the server. Internet access is required.</p>
     </section>
 

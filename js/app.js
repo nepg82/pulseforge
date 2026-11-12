@@ -2,7 +2,7 @@ import { AudioEngine } from "./audio-engine.js";
 import { PlaybackScheduler } from "./playback.js";
 import { configureMediaSession, setMediaPlaybackState } from "./media-session.js";
 
-const BUILD_STAMP = "261112-1608";
+const BUILD_STAMP = "261112-1615";
 const CACHE_PREFIX = "pulseforge-";
 const $ = id => document.getElementById(id);
 
@@ -11,11 +11,15 @@ const $ = id => document.getElementById(id);
 function log(_message) {}
 
 const engine = new AudioEngine({ onLog: log, onState: updateDiagnostics });
+let chordIndex = 0;
 const scheduler = new PlaybackScheduler({
   getContext: () => engine.context,
   scheduleStep: (step, time) => {
-    // Temporary reference pulse. The musical sequencer comes later.
-    if (step % 4 === 0) engine.scheduleReferencePulse(time, step % 16 === 8 ? 247 : 220);
+    // One sustained chord per 16-step bar; the progression loops every four bars.
+    if (step === 0) {
+      engine.schedulePadChord(time, chordIndex % 4);
+      chordIndex++;
+    }
   },
   onLog: log,
   onState: running => { $("schedulerState").textContent = running ? "Running" : "Stopped"; }
@@ -30,9 +34,9 @@ function updateDiagnostics() {
   $("keepaliveState").textContent = d.keepalive;
 }
 function setPlayingUI(playing) {
-  $("playButton").textContent = playing ? "Stop test" : "Start test";
+  $("playButton").textContent = playing ? "Stop music" : "Start music";
   $("playButton").classList.toggle("playing", playing);
-  $("statusText").textContent = playing ? "Playing · engine test" : "Ready";
+  $("statusText").textContent = playing ? "Playing · Chillwave preview" : "Ready";
   $("statusDot").classList.toggle("active", playing);
   setMediaPlaybackState(playing ? "playing" : "paused");
 }
@@ -42,6 +46,7 @@ async function start() {
   $("playButton").disabled = true;
   try {
     await engine.start();
+    chordIndex = 0;
     scheduler.start();
     setPlayingUI(true);
     log("Playback started by user.");
@@ -66,7 +71,7 @@ $("buildStamp").addEventListener("click", () => {
   panel.hidden = !panel.hidden;
   $("buildStamp").setAttribute("aria-expanded", String(!panel.hidden));
   if (!panel.hidden) {
-    $("logOutput").textContent = "Event logging is disabled. Live engine diagnostics remain available above.";
+    $("logOutput").textContent = "Event logging is off. Diagnostics show live playback-system status only.";
     updateDiagnostics();
     updateServiceWorkerStatus();
   }

@@ -7,7 +7,7 @@ This is the first clean PulseForge scaffold. It intentionally does not contain t
 1. Copy your existing `app-icons/app-icon-192.png` and `app-icons/app-icon-512.png` into this project's `app-icons/` folder.
 2. Serve this folder from a local web server (ES modules and service workers do not work reliably from `file://`). For example, use the same local server workflow you use for your other PWAs.
 3. Open `index.html`. Tap **Start test** and confirm the reference pulse plays at a moderate test level.
-4. Tap the build stamp (`261112-1608`) to open live diagnostics. The stamp can be updated for each build.
+4. Tap the build stamp (`261112-1615`) to open live diagnostics. The stamp can be updated for each build.
 
 ## Included foundation
 
@@ -22,8 +22,8 @@ This is the first clean PulseForge scaffold. It intentionally does not contain t
 
 ## Current scope
 
-The reference pulse is only an engine test. No musical sequencer, instruments, styles, or settings have been added yet. The next milestone is to validate continuous playback, screen-lock behavior, and Bluetooth stability before adding the Chillwave sound engine.
+Milestone 0.2.0 adds the first musical layer: a repeating four-chord Chillwave pad (Am9 → Fmaj7 → Cmaj9 → G6/9), built from quiet sine and triangle oscillators with overlapping chord releases for smooth transitions. Drums, melody, energy controls, and sound-shaping settings are not included yet.
 
 ## Cache versioning
 
-When changing the offline app shell, increment `CACHE_NAME` in `sw.js`. The hard-reset control does not require a cache-version bump.
+When changing the offline app shell, increment `CACHE_NAME` in `sw.js` (currently `pulseforge-shell-v0.2.0`). The hard-reset control does not require a cache-version bump.

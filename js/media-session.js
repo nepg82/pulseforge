@@ -7,7 +7,7 @@ export function configureMediaSession({ onPlay, onPause, onStop, onLog = () => {
     if ("MediaMetadata" in window) {
       navigator.mediaSession.metadata = new MediaMetadata({
         title: "PulseForge",
-        artist: "Chillwave audio engine test",
+        artist: "Generative Chillwave",
         album: "Offline generative audio",
         artwork: [
           { src: "./app-icons/app-icon-192.png", sizes: "192x192", type: "image/png" },

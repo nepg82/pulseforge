@@ -68,7 +68,7 @@ export class AudioEngine {
       this.filter.frequency.value = 14000;
       this.filter.connect(this.compressor);
       this.master = this.context.createGain();
-      this.master.gain.value = 0.3;
+      this.master.gain.value = 0.6;
       this.compressor.connect(this.master).connect(this.context.destination);
       this.context.addEventListener("statechange", () => {
         this.onLog(`AudioContext state: ${this.context.state}`);
@@ -132,7 +132,59 @@ export class AudioEngine {
 
   setAudible(enabled) {
     if (!this.master || !this.context) return;
-    this.master.gain.setTargetAtTime(enabled ? 0.3 : 0, this.context.currentTime, 0.04);
+    this.master.gain.setTargetAtTime(enabled ? 0.6 : 0, this.context.currentTime, 0.04);
+  }
+
+
+  schedulePadChord(time, chordIndex = 0) {
+    if (!this.context || !this.filter || this.yielded) return;
+
+    // Am9 → Fmaj7 → Cmaj9 → G6/9. Compact mid-register voicings keep the pad warm, not boomy.
+    const progression = [
+      [57, 60, 64, 67, 71], // A3 C4 E4 G4 B4
+      [57, 60, 64, 65, 69], // A3 C4 E4 F4 A4
+      [55, 59, 60, 64, 67], // G3 B3 C4 E4 G4
+      [55, 59, 62, 64, 69]  // G3 B3 D4 E4 A4
+    ];
+    const notes = progression[chordIndex % progression.length];
+    const duration = 4.6;
+    const attack = 1.05;
+    const releaseStart = 3.45;
+    const releaseEnd = duration;
+
+    for (const midi of notes) {
+      const frequency = 440 * Math.pow(2, (midi - 69) / 12);
+      const sine = this.context.createOscillator();
+      const triangle = this.context.createOscillator();
+      const sineGain = this.context.createGain();
+      const triangleGain = this.context.createGain();
+
+      sine.type = "sine";
+      triangle.type = "triangle";
+      sine.frequency.setValueAtTime(frequency, time);
+      triangle.frequency.setValueAtTime(frequency, time);
+
+      for (const gain of [sineGain.gain, triangleGain.gain]) {
+        gain.setValueAtTime(0.0001, time);
+        gain.exponentialRampToValueAtTime(gain === sineGain.gain ? 0.09 : 0.022, time + attack);
+        gain.setValueAtTime(gain === sineGain.gain ? 0.09 : 0.022, time + releaseStart);
+        gain.exponentialRampToValueAtTime(0.0001, time + releaseEnd);
+      }
+
+      sine.connect(sineGain).connect(this.filter);
+      triangle.connect(triangleGain).connect(this.filter);
+      sine.start(time);
+      triangle.start(time);
+      sine.stop(time + releaseEnd + 0.03);
+      triangle.stop(time + releaseEnd + 0.03);
+      const cleanup = () => {
+        sine.disconnect();
+        triangle.disconnect();
+        sineGain.disconnect();
+        triangleGain.disconnect();
+      };
+      sine.addEventListener("ended", cleanup, { once: true });
+    }
   }
 
   scheduleReferencePulse(time, frequency = 220) {
