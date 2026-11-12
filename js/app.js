@@ -1,140 +1,174 @@
 import { AudioEngine } from "./audio-engine.js";
-import { PlaybackController } from "./playback.js";
-import { setupMediaSession, setMediaMetadata, setMediaPlaybackState } from "./media-session.js";
+import { PlaybackScheduler } from "./playback.js";
+import { configureMediaSession, setMediaPlaybackState } from "./media-session.js";
 
+const BUILD_STAMP = "261112-1554";
+const LOG_KEY = "pulseforge-diagnostics-v1";
+const CACHE_PREFIX = "pulseforge-";
 const $ = id => document.getElementById(id);
-const mediaElement = $("media-output");
-const logElement = $("log");
-const logLines = [];
-const trackNames = ["First Light", "Blue Current", "Night Signal"];
 
+let logEntries = [];
+try { logEntries = JSON.parse(localStorage.getItem(LOG_KEY) || "[]"); } catch (_) {}
 function log(message) {
-  const stamp = new Date().toLocaleTimeString();
-  logLines.push(`[${stamp}] ${message}`);
-  if (logLines.length > 180) logLines.shift();
-  // Keep the live log in memory, but don't force DOM/layout work while the
-  // diagnostics panel is collapsed. The complete log is rendered when opened.
-  if (!$("diagnostics-body").hidden) {
-    logElement.textContent = logLines.join("\n");
-    logElement.scrollTop = logElement.scrollHeight;
-  }
-  console.info(`[PulseForge] ${message}`);
+  const stamp = new Date().toLocaleString("sv-SE").replace("T", " ");
+  logEntries.push(`${stamp} ${message}`);
+  if (logEntries.length > 500) logEntries.splice(0, logEntries.length - 500);
+  try { localStorage.setItem(LOG_KEY, JSON.stringify(logEntries)); } catch (_) {}
+  if (!$("diagnostics").hidden) renderLog();
 }
+function renderLog() { $("logOutput").textContent = logEntries.slice(-80).reverse().join("\n"); }
 
-const engine = new AudioEngine({
+const engine = new AudioEngine({ onLog: log, onState: updateDiagnostics });
+const scheduler = new PlaybackScheduler({
+  getContext: () => engine.context,
+  scheduleStep: (step, time) => {
+    // Temporary, deliberately quiet reference pulse. The musical sequencer comes later.
+    if (step % 4 === 0) engine.scheduleReferencePulse(time, step % 16 === 8 ? 247 : 220);
+  },
   onLog: log,
-  onState: state => {
-    if (state === "interrupted" && controller) void controller.handleExternalPause();
-  }
+  onState: running => { $("schedulerState").textContent = running ? "Running" : "Stopped"; }
 });
 
-const controller = new PlaybackController({ engine, mediaElement, onLog: log, onState: renderState });
-
-function renderState(state, elapsed) {
-  $("status").dataset.state = state;
-  $("status-text").textContent = state.toUpperCase();
-  $("play-icon").className = state === "playing" ? "pause-icon" : "play-icon";
-  $("play-label").textContent = state === "playing" ? "PAUSE" : "PLAY";
-  $("play-button").setAttribute("aria-label", state === "playing" ? "Pause" : "Play");
-  $("stop-button").disabled = state === "stopped";
-  $("engine-state").textContent = engine.getInfo().contextState;
-  $("output-state").textContent = engine.getInfo().outputConnected ? "Tone.js + media keepalive" : "Not connected";
-  if (typeof elapsed === "number") $("session-time").textContent = formatTime(elapsed);
-  setMediaPlaybackState(state === "playing" ? "playing" : (state === "stopped" ? "none" : "paused"));
-  if (state === "interrupted") $("playback-hint").textContent = "Playback was interrupted. Press play to resume.";
-  else if (state === "paused") $("playback-hint").textContent = "Paused. Your session is ready to resume.";
-  else if (state === "playing") $("playback-hint").textContent = "Audio is running. You can lock the screen.";
-  else $("playback-hint").textContent = "Tap play to start the audio engine.";
+function updateDiagnostics() {
+  const d = engine.diagnostics;
+  $("ctxState").textContent = d.context;
+  $("sampleRate").textContent = d.sampleRate;
+  $("baseLatency").textContent = d.baseLatency;
+  $("outputLatency").textContent = d.outputLatency;
+  $("keepaliveState").textContent = d.keepalive;
+}
+function setPlayingUI(playing) {
+  $("playButton").textContent = playing ? "Stop test" : "Start test";
+  $("playButton").classList.toggle("playing", playing);
+  $("statusText").textContent = playing ? "Playing · engine test" : "Ready";
+  $("statusDot").classList.toggle("active", playing);
+  setMediaPlaybackState(playing ? "playing" : "paused");
 }
 
-function formatTime(milliseconds) {
-  const seconds = Math.floor(milliseconds / 1000);
-  return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
-}
-
-function updateTrack(pattern) {
-  const title = trackNames[pattern];
-  $("track-title").textContent = title;
-  $("track-subtitle").textContent = `Playback pattern ${pattern + 1} of ${trackNames.length}.`;
-  setMediaMetadata(title);
-  log(`Current pattern: ${title}.`);
-}
-
-async function changeTrack(direction) {
-  const pattern = await controller.changePattern(direction);
-  updateTrack(pattern);
-}
-
-$("play-button").addEventListener("click", async () => {
-  try { await controller.toggle(); }
-  catch (error) { $("playback-hint").textContent = error.message; }
-});
-$("stop-button").addEventListener("click", () => controller.stop().catch(error => log(`Stop failed: ${error.message}`)));
-$("next-button").addEventListener("click", () => changeTrack(1).catch(error => log(`Next failed: ${error.message}`)));
-$("previous-button").addEventListener("click", () => changeTrack(-1).catch(error => log(`Previous failed: ${error.message}`)));
-
-$("diagnostics-toggle").addEventListener("click", () => {
-  const button = $("diagnostics-toggle");
-  const expanded = button.getAttribute("aria-expanded") === "true";
-  button.setAttribute("aria-expanded", String(!expanded));
-  $("diagnostics-body").hidden = expanded;
-  if (!expanded) {
-    logElement.textContent = logLines.join("\n");
-    logElement.scrollTop = logElement.scrollHeight;
-  }
-});
-$("copy-log").addEventListener("click", async () => {
-  try { await navigator.clipboard.writeText(logLines.join("\n")); log("Diagnostics copied to clipboard."); }
-  catch (error) { log(`Clipboard unavailable: ${error.message}`); }
-});
-$("clear-log").addEventListener("click", () => { logLines.length = 0; logElement.textContent = ""; log("Log cleared."); });
-
-$("build-refresh").addEventListener("click", async () => {
-  const button = $("build-refresh");
-  button.disabled = true;
-  button.textContent = "RELOADING";
-  log("Manual server refresh requested; unregistering PulseForge service worker and clearing its shell cache.");
+async function start() {
+  if (engine.playing) return;
+  $("playButton").disabled = true;
   try {
+    await engine.start();
+    scheduler.start();
+    setPlayingUI(true);
+    log("Playback started by user.");
+  } catch (error) {
+    log(`Start failed: ${error.message}`);
+    $("statusText").textContent = "Unable to start audio";
+  } finally {
+    $("playButton").disabled = false;
+    updateDiagnostics();
+  }
+}
+async function stop(reason = "user") {
+  scheduler.stop();
+  await engine.stop(reason);
+  setPlayingUI(false);
+  updateDiagnostics();
+}
+
+$("playButton").addEventListener("click", () => engine.playing ? stop() : start());
+$("buildStamp").addEventListener("click", () => {
+  const panel = $("diagnostics");
+  panel.hidden = !panel.hidden;
+  $("buildStamp").setAttribute("aria-expanded", String(!panel.hidden));
+  if (!panel.hidden) {
+    renderLog();
+    updateDiagnostics();
+    updateServiceWorkerStatus();
+  }
+});
+$("copyLogButton").addEventListener("click", async () => {
+  const content = logEntries.join("\n");
+  try {
+    await navigator.clipboard.writeText(content);
+    log("Diagnostic log copied.");
+  } catch (_) {
+    log("Clipboard unavailable; select the visible log manually.");
+  }
+});
+
+async function hardReset() {
+  if (!confirm("Unregister PulseForge's service worker, clear its offline cache, and reload from the server? Internet access is required.")) return;
+  $("hardResetButton").disabled = true;
+  try {
+    await stop("hard reset");
     if ("serviceWorker" in navigator) {
-      const registration = await navigator.serviceWorker.getRegistration();
-      if (registration) log(`Service worker unregistered: ${await registration.unregister()}.`);
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      const appPath = new URL("./", location.href).pathname;
+      for (const registration of registrations) {
+        const scopePath = new URL(registration.scope).pathname;
+        if (scopePath.startsWith(appPath)) await registration.unregister();
+      }
     }
     if ("caches" in window) {
       const keys = await caches.keys();
-      const appCaches = keys.filter(key => key.startsWith("pulseforge-shell-"));
-      await Promise.all(appCaches.map(key => caches.delete(key)));
-      log(`PulseForge caches cleared: ${appCaches.length}.`);
+      await Promise.all(keys.filter(key => key.startsWith(CACHE_PREFIX)).map(key => caches.delete(key)));
     }
-  } catch (error) { log(`Refresh cleanup warning: ${error.message}`); }
-  const url = new URL(window.location.href);
-  url.searchParams.set("refresh", String(Date.now()));
-  window.location.replace(url.href);
-});
+    const freshUrl = new URL(location.href);
+    freshUrl.searchParams.set("_hard", String(Date.now()));
+    freshUrl.hash = "";
+    location.replace(freshUrl.href);
+  } catch (error) {
+    log(`Hard reset failed: ${error.message}`);
+    $("hardResetButton").disabled = false;
+  }
+}
+$("hardResetButton").addEventListener("click", hardReset);
 
-setupMediaSession({
-  onPlay: () => controller.play(), onPause: () => controller.pause(), onStop: () => controller.stop(),
-  onNext: () => changeTrack(1), onPrevious: () => changeTrack(-1), onLog: log
-});
-
-document.addEventListener("visibilitychange", () => log(`Visibility changed: ${document.visibilityState}; audio=${engine.getInfo().contextState}`));
-window.addEventListener("pagehide", () => log("Pagehide event."));
-window.addEventListener("pageshow", event => log(`Pageshow event; persisted=${event.persisted}.`));
-window.addEventListener("online", () => log("Network online."));
-window.addEventListener("offline", () => log("Network offline."));
-
-if ("serviceWorker" in navigator && location.protocol !== "file:") {
-  window.addEventListener("load", async () => {
-    try {
-      const registration = await navigator.serviceWorker.register("./sw.js");
-      log(`Service worker registered: ${registration.scope}`);
-      $("install-state").textContent = "OFFLINE READY";
-    } catch (error) { log(`Service worker registration failed: ${error.message}`); }
-  });
-} else {
-  log("Service worker unavailable here; serve from HTTPS or localhost to test install/offline.");
+async function updateServiceWorkerStatus() {
+  if (!("serviceWorker" in navigator)) {
+    $("swState").textContent = "Unsupported";
+    return;
+  }
+  try {
+    const registrations = await navigator.serviceWorker.getRegistrations();
+    const appPath = new URL("./", location.href).pathname;
+    const appRegistration = registrations.find(reg => new URL(reg.scope).pathname.startsWith(appPath));
+    $("swState").textContent = appRegistration ? (appRegistration.active ? "Active" : "Registered") : "Not registered";
+  } catch (error) {
+    $("swState").textContent = "Unavailable";
+    log(`Service worker status error: ${error.message}`);
+  }
 }
 
-log(`Tone.js: ${window.Tone?.version || "not loaded"}.`);
-log(`Media Session API: ${"mediaSession" in navigator ? "available" : "unavailable"}.`);
-log(`MediaMetadata: ${typeof window.MediaMetadata === "function" ? "available" : "unavailable"}.`);
-log(`PulseForge initialized; userAgent=${navigator.userAgent}`);
+configureMediaSession({
+  onPlay: start,
+  onPause: () => stop("media session pause"),
+  onStop: () => stop("media session stop"),
+  onLog: log
+});
+
+document.addEventListener("visibilitychange", () => {
+  log(`Visibility: ${document.visibilityState}`);
+  if (!document.hidden && engine.playing) engine.resumeFromInterruption();
+});
+document.addEventListener("freeze", () => log("Page freeze event."));
+document.addEventListener("resume", () => {
+  log("Page resume event.");
+  if (engine.playing) engine.resumeFromInterruption();
+});
+window.addEventListener("pagehide", () => log("Page hidden/unloaded."));
+window.addEventListener("error", event => log(`Window error: ${event.message}`));
+window.addEventListener("unhandledrejection", event => log(`Unhandled rejection: ${event.reason?.message || event.reason}`));
+
+async function registerServiceWorker() {
+  if (!("serviceWorker" in navigator)) {
+    log("Service Worker API unavailable.");
+    updateServiceWorkerStatus();
+    return;
+  }
+  try {
+    await navigator.serviceWorker.register("./sw.js", { scope: "./" });
+    log("Service worker registered.");
+  } catch (error) {
+    log(`Service worker registration failed: ${error.message}`);
+  }
+  updateServiceWorkerStatus();
+}
+
+$("buildStamp").textContent = BUILD_STAMP;
+log(`PulseForge booted (${BUILD_STAMP}).`);
+updateDiagnostics();
+registerServiceWorker();

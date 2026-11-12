@@ -4,65 +4,52 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#171428">
-  <meta name="description" content="PulseForge — an offline electronic music playground.">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="PulseForge">
   <title>PulseForge</title>
   <link rel="manifest" href="./manifest.json">
-  <link rel="icon" href="./app-icons/app-icon-192.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="./app-icons/app-icon-192.png">
+  <link rel="apple-touch-icon" href="./app-icons/app-icon-512.png">
   <link rel="stylesheet" href="./css/style.css">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/15.1.22/Tone.js"></script>
 </head>
 <body>
   <main class="app-shell">
-    <header class="topbar">
-      <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></div>
-      <div>
-        <p class="eyebrow">GENERATIVE AUDIO</p>
-        <h1>PulseForge</h1>
-      </div>
-      <div class="status" id="status" data-state="stopped">
-        <span class="status-dot"></span>
-        <span id="status-text">STOPPED</span>
-      </div>
+    <header class="app-header">
+      <div class="eyebrow">GENERATIVE AUDIO</div>
+      <h1>PulseForge</h1>
+      <button id="buildStamp" class="build-stamp" type="button" aria-expanded="false" aria-controls="diagnostics">261112-1554</button>
     </header>
 
-    <section class="player-panel" aria-label="Audio player">
-      <div class="track-info">
-        <p class="eyebrow">CURRENT SESSION</p>
-        <h2 id="track-title">First Light</h2>
-        <p id="track-subtitle">A simple pulse, built to stay running.</p>
-      </div>
-
-      <div class="transport">
-        <button class="transport-button secondary" id="previous-button" type="button" aria-label="Previous pattern"><span class="previous-icon"></span></button>
-        <button class="transport-button primary" id="play-button" type="button" aria-label="Play"><span class="play-icon" id="play-icon"></span><span id="play-label">PLAY</span></button>
-        <button class="transport-button secondary" id="next-button" type="button" aria-label="Next pattern"><span class="next-icon"></span></button>
-        <button class="transport-button secondary stop-button" id="stop-button" type="button" aria-label="Stop playback" disabled><span class="stop-icon"></span></button>
-      </div>
-
-      <p class="hint" id="playback-hint">Tap play to start the audio engine.</p>
+    <section class="player-card" aria-label="Audio engine test">
+      <div class="status-line"><span id="statusDot" class="status-dot"></span><span id="statusText">Ready</span></div>
+      <div class="pulse-mark" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
+      <p class="test-label">AUDIO ENGINE CHECK</p>
+      <p class="test-description">A quiet reference pulse for checking playback, background operation, and Bluetooth stability.</p>
+      <button id="playButton" class="play-button" type="button">Start test</button>
     </section>
 
-    <section class="info-grid" aria-label="Playback information">
-      <div class="info-card"><span class="info-label">ENGINE</span><strong id="engine-state">Not started</strong></div>
-      <div class="info-card"><span class="info-label">OUTPUT</span><strong id="output-state">Not connected</strong></div>
-      <div class="info-card"><span class="info-label">SESSION</span><strong id="session-time">00:00</strong></div>
-    </section>
-
-    <section class="diagnostics">
-      <button class="diagnostics-toggle" id="diagnostics-toggle" type="button" aria-expanded="false"><span>DIAGNOSTICS</span><span class="chevron">⌄</span></button>
-      <div class="diagnostics-body" id="diagnostics-body" hidden>
-        <div class="diagnostics-actions"><span class="diagnostics-note">Local playback log</span><button class="text-button" id="copy-log" type="button">COPY LOG</button><button class="text-button" id="clear-log" type="button">CLEAR</button></div>
-        <pre id="log" aria-live="polite">PulseForge ready.</pre>
+    <section id="diagnostics" class="diagnostics" hidden>
+      <div class="section-heading">Diagnostics</div>
+      <div class="diagnostic-grid">
+        <span>Audio context</span><strong id="ctxState">Not created</strong>
+        <span>Sample rate</span><strong id="sampleRate">—</strong>
+        <span>Base latency</span><strong id="baseLatency">—</strong>
+        <span>Output latency</span><strong id="outputLatency">—</strong>
+        <span>Scheduler</span><strong id="schedulerState">Stopped</strong>
+        <span>Media keepalive</span><strong id="keepaliveState">Stopped</strong>
+        <span>Service worker</span><strong id="swState">Checking…</strong>
       </div>
+      <div class="diagnostic-actions">
+        <button id="copyLogButton" class="secondary-button" type="button">Copy log</button>
+        <button id="hardResetButton" class="danger-button" type="button">Hard reset</button>
+      </div>
+      <pre id="logOutput" class="log-output" aria-live="polite"></pre>
+      <p class="reset-note">Hard reset unregisters PulseForge's service worker, clears its offline cache, and reloads a fresh copy from the server. Internet access is required.</p>
     </section>
 
-    <footer>
-      <span class="footer-left">BUILT FOR THE LONG RUN</span>
-      <button id="build-refresh" class="build-stamp" type="button" aria-label="Force reload PulseForge from the server" title="Tap to clear the app cache and reload from the server">261110-1224</button>
-      <span id="install-state" class="footer-right">WEB APP</span>
-    </footer>
+    <footer>Offline-first · Native Web Audio · No streaming</footer>
   </main>
-  <audio id="media-output" playsinline></audio>
   <script type="module" src="./js/app.js"></script>
 </body>
 </html>
