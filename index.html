@@ -24,9 +24,31 @@
     <section class="player-card" aria-label="Chillwave music preview">
       <div class="status-line"><span id="statusDot" class="status-dot"></span><span id="statusText">Ready</span></div>
       <div class="pulse-mark" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
-      <p class="test-label">CHILLWAVE · PAD STUDY</p>
-      <p class="test-description">A slowly evolving four-chord pad. This first musical layer is a foundation for the rhythm and melody to come.</p>
+      <p class="test-label">CHILLWAVE · RHYTHM STUDY</p>
+      <p class="test-description">A slowly evolving four-chord pad with a relaxed, adjustable drum groove.</p>
       <button id="playButton" class="play-button" type="button">Start music</button>
+    </section>
+
+    <section class="drum-controls" aria-label="Drum controls">
+      <div class="controls-heading">
+        <div class="section-heading">Drums</div>
+        <label class="drum-enable"><input id="drumsEnabled" type="checkbox" checked><span>On</span></label>
+      </div>
+      <div class="level-control">
+        <label for="kickLevel">Kick</label>
+        <input id="kickLevel" type="range" min="0" max="100" value="65">
+        <output id="kickValue" for="kickLevel">65%</output>
+      </div>
+      <div class="level-control">
+        <label for="snareLevel">Snare</label>
+        <input id="snareLevel" type="range" min="0" max="100" value="45">
+        <output id="snareValue" for="snareLevel">45%</output>
+      </div>
+      <div class="level-control">
+        <label for="hatLevel">Hi-hat</label>
+        <input id="hatLevel" type="range" min="0" max="100" value="22">
+        <output id="hatValue" for="hatLevel">22%</output>
+      </div>
     </section>
 
     <section id="diagnostics" class="diagnostics" hidden>

@@ -27,3 +27,11 @@ Milestone 0.2.0 adds the first musical layer: a repeating four-chord Chillwave p
 ## Cache versioning
 
 When changing the offline app shell, increment `CACHE_NAME` in `sw.js` (currently `pulseforge-shell-v0.2.0`). The hard-reset control does not require a cache-version bump.
+
+
+## 0.3.0 – Drum layer
+
+- Added synthesized kick, snare, and closed hi-hat sounds.
+- Added a relaxed two-bar backbeat with independent level controls and an on/off switch.
+- Pad progression and playback infrastructure remain unchanged.
+- Event logging remains disabled.

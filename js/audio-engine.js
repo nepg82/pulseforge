@@ -33,6 +33,8 @@ export class AudioEngine {
     this.master = null;
     this.filter = null;
     this.compressor = null;
+    this.noiseBuffer = null;
+    this.drumLevels = { kick: 0.65, snare: 0.45, hat: 0.22 };
     this.keepalive = null;
     this.keepaliveUrl = null;
     this.playing = false;
@@ -67,6 +69,9 @@ export class AudioEngine {
       this.filter.type = "lowpass";
       this.filter.frequency.value = 14000;
       this.filter.connect(this.compressor);
+      this.noiseBuffer = this.context.createBuffer(1, this.context.sampleRate, this.context.sampleRate);
+      const noiseData = this.noiseBuffer.getChannelData(0);
+      for (let i = 0; i < noiseData.length; i++) noiseData[i] = Math.random() * 2 - 1;
       this.master = this.context.createGain();
       this.master.gain.value = 0.6;
       this.compressor.connect(this.master).connect(this.context.destination);
@@ -187,6 +192,94 @@ export class AudioEngine {
     }
   }
 
+  setDrumLevel(instrument, value) {
+    if (instrument in this.drumLevels) {
+      this.drumLevels[instrument] = Math.max(0, Math.min(1, Number(value) || 0));
+    }
+  }
+
+  scheduleDrumStep(step, time) {
+    if (!this.context || !this.filter || this.yielded) return;
+    const index = step % 16;
+    const levels = this.drumLevels;
+
+    // A relaxed two-bar backbeat at the current 120 BPM scheduler tempo.
+    if ([0, 4, 8, 12].includes(index) && levels.kick > 0) {
+      this.scheduleKick(time, levels.kick, index === 0 || index === 8 ? 1 : 0.88);
+    }
+    if ([2, 6, 10, 14].includes(index) && levels.snare > 0) {
+      this.scheduleSnare(time, levels.snare, 0.82);
+    }
+    if (levels.hat > 0) {
+      const accent = index % 4 === 0 ? 0.72 : (index % 2 === 0 ? 0.48 : 0.30);
+      this.scheduleHat(time, levels.hat, accent);
+    }
+  }
+
+  scheduleKick(time, level, velocity = 1) {
+    const osc = this.context.createOscillator();
+    const amp = this.context.createGain();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(118, time);
+    osc.frequency.exponentialRampToValueAtTime(46, time + 0.17);
+    amp.gain.setValueAtTime(0.0001, time);
+    amp.gain.exponentialRampToValueAtTime(0.28 * level * velocity, time + 0.006);
+    amp.gain.exponentialRampToValueAtTime(0.0001, time + 0.30);
+    osc.connect(amp).connect(this.filter);
+    osc.start(time);
+    osc.stop(time + 0.32);
+    osc.addEventListener("ended", () => { osc.disconnect(); amp.disconnect(); }, { once: true });
+  }
+
+  scheduleSnare(time, level, velocity = 1) {
+    const noise = this.context.createBufferSource();
+    const tone = this.context.createOscillator();
+    const noiseFilter = this.context.createBiquadFilter();
+    const noiseAmp = this.context.createGain();
+    const toneAmp = this.context.createGain();
+    noise.buffer = this.noiseBuffer;
+    noiseFilter.type = "bandpass";
+    noiseFilter.frequency.setValueAtTime(1850, time);
+    noiseFilter.Q.value = 0.75;
+    noiseAmp.gain.setValueAtTime(0.0001, time);
+    noiseAmp.gain.exponentialRampToValueAtTime(0.145 * level * velocity, time + 0.004);
+    noiseAmp.gain.exponentialRampToValueAtTime(0.0001, time + 0.19);
+    tone.type = "sine";
+    tone.frequency.setValueAtTime(190, time);
+    tone.frequency.exponentialRampToValueAtTime(135, time + 0.09);
+    toneAmp.gain.setValueAtTime(0.0001, time);
+    toneAmp.gain.exponentialRampToValueAtTime(0.055 * level * velocity, time + 0.003);
+    toneAmp.gain.exponentialRampToValueAtTime(0.0001, time + 0.12);
+    noise.connect(noiseFilter).connect(noiseAmp).connect(this.filter);
+    tone.connect(toneAmp).connect(this.filter);
+    noise.start(time);
+    noise.stop(time + 0.20);
+    tone.start(time);
+    tone.stop(time + 0.13);
+    noise.addEventListener("ended", () => {
+      noise.disconnect(); noiseFilter.disconnect(); noiseAmp.disconnect();
+    }, { once: true });
+    tone.addEventListener("ended", () => { tone.disconnect(); toneAmp.disconnect(); }, { once: true });
+  }
+
+  scheduleHat(time, level, velocity = 1) {
+    const noise = this.context.createBufferSource();
+    const highpass = this.context.createBiquadFilter();
+    const amp = this.context.createGain();
+    noise.buffer = this.noiseBuffer;
+    highpass.type = "highpass";
+    highpass.frequency.setValueAtTime(6800, time);
+    amp.gain.setValueAtTime(0.0001, time);
+    amp.gain.exponentialRampToValueAtTime(0.052 * level * velocity, time + 0.002);
+    amp.gain.exponentialRampToValueAtTime(0.0001, time + 0.055);
+    noise.connect(highpass).connect(amp).connect(this.filter);
+    noise.start(time);
+    noise.stop(time + 0.06);
+    noise.addEventListener("ended", () => {
+      noise.disconnect(); highpass.disconnect(); amp.disconnect();
+    }, { once: true });
+  }
+
   scheduleReferencePulse(time, frequency = 220) {
     if (!this.context || !this.filter || this.yielded) return;
     const oscillator = this.context.createOscillator();
@@ -240,6 +333,6 @@ export class AudioEngine {
     this.keepaliveUrl = null;
     if (this.context && this.context.state !== "closed") await this.context.close();
     this.context = null;
-    this.master = this.filter = this.compressor = null;
+    this.master = this.filter = this.compressor = this.noiseBuffer = null;
   }
 }

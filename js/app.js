@@ -2,7 +2,7 @@ import { AudioEngine } from "./audio-engine.js";
 import { PlaybackScheduler } from "./playback.js";
 import { configureMediaSession, setMediaPlaybackState } from "./media-session.js";
 
-const BUILD_STAMP = "261112-1615";
+const BUILD_STAMP = "261112-1126";
 const CACHE_PREFIX = "pulseforge-";
 const $ = id => document.getElementById(id);
 
@@ -15,11 +15,12 @@ let chordIndex = 0;
 const scheduler = new PlaybackScheduler({
   getContext: () => engine.context,
   scheduleStep: (step, time) => {
-    // One sustained chord per 16-step bar; the progression loops every four bars.
+    // One sustained chord per 16-step, two-bar phrase.
     if (step === 0) {
       engine.schedulePadChord(time, chordIndex % 4);
       chordIndex++;
     }
+    if ($("drumsEnabled").checked) engine.scheduleDrumStep(step, time);
   },
   onLog: log,
   onState: running => { $("schedulerState").textContent = running ? "Running" : "Stopped"; }
@@ -64,6 +65,17 @@ async function stop(reason = "user") {
   setPlayingUI(false);
   updateDiagnostics();
 }
+
+["kick", "snare", "hat"].forEach(instrument => {
+  const slider = $(`${instrument}Level`);
+  const output = $(`${instrument}Value`);
+  const update = value => {
+    engine.setDrumLevel(instrument, Number(value) / 100);
+    output.textContent = `${value}%`;
+  };
+  slider.addEventListener("input", event => update(event.target.value));
+  update(slider.value);
+});
 
 $("playButton").addEventListener("click", () => engine.playing ? stop() : start());
 $("buildStamp").addEventListener("click", () => {
