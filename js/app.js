@@ -2,7 +2,7 @@ import { AudioEngine } from "./audio-engine.js";
 import { PlaybackScheduler } from "./playback.js";
 import { configureMediaSession, setMediaPlaybackState } from "./media-session.js";
 
-const BUILD_STAMP = "261112-1126";
+const BUILD_STAMP = "261112-1239";
 const CACHE_PREFIX = "pulseforge-";
 const $ = id => document.getElementById(id);
 

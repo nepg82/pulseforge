@@ -7,7 +7,7 @@ This is the first clean PulseForge scaffold. It intentionally does not contain t
 1. Copy your existing `app-icons/app-icon-192.png` and `app-icons/app-icon-512.png` into this project's `app-icons/` folder.
 2. Serve this folder from a local web server (ES modules and service workers do not work reliably from `file://`). For example, use the same local server workflow you use for your other PWAs.
 3. Open `index.html`. Tap **Start test** and confirm the reference pulse plays at a moderate test level.
-4. Tap the build stamp (`261112-1615`) to open live diagnostics. The stamp can be updated for each build.
+4. Tap the build stamp (`261112-1239`) to open live diagnostics. The stamp can be updated for each build.
 
 ## Included foundation
 
@@ -40,3 +40,10 @@ When changing the offline app shell, increment `CACHE_NAME` in `sw.js` (currentl
 ### 0.3.1
 - Drum step interval doubled to 0.5 seconds (60 BPM); pad timing is unchanged.
 - Drum voice amplitudes increased to 175% of the previous values.
+
+
+### 0.3.2
+- Increased drum voice gain so the level controls should reach a useful listening level around the middle of their range.
+- Lowered the hi-hat high-pass cutoff from 6.8 kHz to 4.6 kHz to reduce its sharpness.
+- Shortened pad attack from 1.05 to 0.7 seconds and held each chord until the next measure, with a 0.6-second crossfade.
+- Drum tempo, pad measure timing, chord progression, and playback architecture are unchanged.

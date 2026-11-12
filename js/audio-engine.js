@@ -153,8 +153,9 @@ export class AudioEngine {
     ];
     const notes = progression[chordIndex % progression.length];
     const duration = 4.6;
-    const attack = 1.05;
-    const releaseStart = 3.45;
+    const attack = 0.7;
+    // Hold the chord until the next measure, then crossfade over 0.6 seconds.
+    const releaseStart = 4.0;
     const releaseEnd = duration;
 
     for (const midi of notes) {
@@ -205,7 +206,7 @@ export class AudioEngine {
     if (step % 2 !== 0) return;
     const index = (step / 2) % 16;
     const levels = this.drumLevels;
-    const gain = 1.75;
+    const gain = 3.1;
 
     // Same two-bar pattern, stretched to half the previous drum tempo.
     if ([0, 4, 8, 12].includes(index) && levels.kick > 0) {
@@ -272,7 +273,7 @@ export class AudioEngine {
     const amp = this.context.createGain();
     noise.buffer = this.noiseBuffer;
     highpass.type = "highpass";
-    highpass.frequency.setValueAtTime(6800, time);
+    highpass.frequency.setValueAtTime(4600, time);
     amp.gain.setValueAtTime(0.0001, time);
     amp.gain.exponentialRampToValueAtTime(0.052 * level * velocity, time + 0.002);
     amp.gain.exponentialRampToValueAtTime(0.0001, time + 0.055);
