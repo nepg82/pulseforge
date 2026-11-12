@@ -242,45 +242,56 @@ export class AudioEngine {
     if (!this.context || !this.filter || this.yielded) return;
     const position = step % 16;
     if (position === 0) this.melodyMeasure++;
-    const eventCount = Math.round(this.melodyDensity / 100 * 16);
-    if (eventCount === 0) return;
-    const eventIndex = Math.floor(position * eventCount / 16);
-    const isNote = Math.floor((position + 1) * eventCount / 16) > Math.floor(position * eventCount / 16);
-    if (!isNote) return;
 
-    // Four-bar conversational phrase: chord tones anchor the beats; offbeats
-    // occasionally use neighboring notes from the shared C-major/A-minor scale.
-    const chordNotes = [
-      [69, 72, 76, 79, 83],       // Am9: A C E G B
-      [69, 72, 76, 77, 81],       // Fmaj7: A C E F A
-      [67, 71, 72, 76, 79, 81],   // Cmaj9: G B C E G A
-      [67, 71, 74, 76, 81]        // G6/9: G B D E A
-    ][chordIndex % 4];
-    const phrase = [
-      [3, 4, 3, 2, 1, 2, 3, 1],
-      [4, 3, 2, 1, 2, 3, 1, 0],
-      [2, 3, 4, 5, 4, 3, 2, 1],
-      [3, 2, 1, 2, 3, 4, 2, 0]
+    // Phrase-based melody: deliberately chosen rhythmic slots create musical
+    // sentences with rests, rather than filling a sixteenth-note grid.
+    const rhythmicPhrases = [
+      [0, 2, 5, 8, 11, 14],       // establish, rise, answer
+      [1, 4, 6, 9, 12, 15],       // pickup and a little syncopation
+      [0, 3, 5, 7, 10, 13, 15],  // more active middle phrase
+      [0, 4, 7, 10, 12]           // leave room for resolution
     ];
     const bar = (this.melodyMeasure - 1) % 4;
-    const motif = phrase[bar];
-    const motifIndex = Math.min(motif.length - 1, Math.floor(eventIndex * motif.length / eventCount));
-    let midi = this.melodyDensity >= 80
-      ? chordNotes[(eventIndex + bar) % chordNotes.length]
-      : chordNotes[motif[motifIndex] % chordNotes.length];
+    const candidates = rhythmicPhrases[bar];
+    const density = this.melodyDensity / 100;
+    // Density controls how many phrase events are selected, not a grid fill.
+    const eventCount = density <= 0 ? 0 : Math.max(1, Math.round(1 + density * (candidates.length - 1)));
+    const selected = new Set();
+    if (eventCount === 1) selected.add(candidates[Math.floor(candidates.length / 2)]);
+    else if (eventCount > 1) {
+      for (let i = 0; i < eventCount; i++) {
+        selected.add(candidates[Math.round(i * (candidates.length - 1) / (eventCount - 1))]);
+      }
+    }
+    if (!selected.has(position)) return;
 
-    // A few offbeat notes lean by a diatonic step, keeping the line fluid
-    // rather than simply arpeggiating each chord.
-    if (this.melodyDensity < 80 && position % 4 !== 0 && eventIndex % 3 === 1) {
+    const chordNotes = [
+      [69, 72, 76, 79, 83],       // Am9
+      [69, 72, 76, 77, 81],       // Fmaj7
+      [67, 71, 72, 76, 79, 81],   // Cmaj9
+      [67, 71, 74, 76, 81]        // G6/9
+    ][chordIndex % 4];
+    const contours = [
+      [1, 2, 3, 2, 1, 0, 1],
+      [2, 1, 0, 1, 2, 3, 2],
+      [0, 1, 2, 3, 4, 3, 2],
+      [2, 3, 2, 1, 0, 1, 0]
+    ];
+    const phraseIndex = candidates.indexOf(position);
+    let noteIndex = contours[bar][Math.max(0, phraseIndex)] % chordNotes.length;
+    // Small phrase-to-phrase variation without losing the melodic contour.
+    if (this.melodyMeasure > 4 && (this.melodyMeasure % 8) >= 5 && phraseIndex === 2) {
+      noteIndex = (noteIndex + 1) % chordNotes.length;
+    }
+    let midi = chordNotes[noteIndex];
+    // Occasional diatonic approach note on a weak subdivision.
+    if ([5, 11, 15].includes(position) && phraseIndex % 2 === 1) {
       const scale = [0, 2, 4, 5, 7, 9, 11];
       const pc = midi % 12;
       const scaleIndex = scale.indexOf(pc);
       if (scaleIndex >= 0) {
-        const neighborIndex = (scaleIndex + (eventIndex % 2 ? 1 : 6)) % scale.length;
-        let neighbor = scale[neighborIndex];
-        if (eventIndex % 2 && neighbor <= pc) neighbor += 12;
-        if (!(eventIndex % 2) && neighbor >= pc) neighbor -= 12;
-        midi = midi - pc + neighbor;
+        const neighbor = scale[(scaleIndex + 1) % scale.length];
+        midi = midi - pc + (neighbor <= pc ? neighbor + 12 : neighbor);
       }
     }
 
@@ -288,20 +299,23 @@ export class AudioEngine {
     const amp = this.context.createGain();
     osc.type = this.melodyShape;
     osc.frequency.setValueAtTime(440 * Math.pow(2, (midi - 69) / 12), time);
-    const peak = this.melodyShape === "triangle" ? 0.028 : 0.038;
+    const peak = this.melodyShape === "triangle" ? 0.026 : 0.035;
     const stepSeconds = 60 / this.bpm / 4;
-    // Let selected notes ring across several sixteenth-note slots. The
-    // longer values land periodically so the line has room to breathe
-    // without turning the high-density setting into an undifferentiated wash.
-    const durationSteps = position % 8 === 0 ? 3.6
-      : position % 4 === 0 ? 2.5
-        : 1.55;
+    // Mostly short/medium notes, with only occasional longer notes. Every
+    // note decays after its attack, avoiding the flat sustained-horn sound.
+    const durationSteps = position === 0 && bar === 3 ? 2.6
+      : phraseIndex % 4 === 2 ? 1.9
+        : phraseIndex % 3 === 0 ? 1.35
+          : 1.6;
     const duration = stepSeconds * durationSteps;
-    const attack = Math.min(0.085, stepSeconds * 0.38);
-    const releaseStart = duration - Math.min(0.14, stepSeconds * 0.55);
+    const attack = Math.min(0.045, stepSeconds * 0.22);
+    const decay = Math.min(0.16, duration * 0.34);
+    const sustain = peak * 0.48;
+    const releaseStart = Math.max(time + attack + decay, time + duration - Math.min(0.09, stepSeconds * 0.28));
     amp.gain.setValueAtTime(0.0001, time);
     amp.gain.exponentialRampToValueAtTime(peak, time + attack);
-    amp.gain.setValueAtTime(peak * 0.9, time + Math.max(attack + 0.01, releaseStart));
+    amp.gain.exponentialRampToValueAtTime(sustain, time + attack + decay);
+    amp.gain.setValueAtTime(sustain, releaseStart);
     amp.gain.exponentialRampToValueAtTime(0.0001, time + duration);
     osc.connect(amp).connect(this.melodyBus);
     osc.start(time);
