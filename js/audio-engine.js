@@ -220,12 +220,12 @@ export class AudioEngine {
   }
 
   setPadVolume(value) {
-    this.padVolume = Math.max(0, Math.min(1, Number(value) / 100));
+    this.padVolume = Math.max(0, Math.min(1.5, Number(value) / 100));
     if (this.padBus && this.context) this.padBus.gain.setTargetAtTime(this.padVolume, this.context.currentTime, 0.025);
   }
 
   setMelodyVolume(value) {
-    this.melodyVolume = Math.max(0, Math.min(1, Number(value) / 100));
+    this.melodyVolume = Math.max(0, Math.min(1.5, Number(value) / 100));
     if (this.melodyBus && this.context) this.melodyBus.gain.setTargetAtTime(this.melodyVolume, this.context.currentTime, 0.025);
   }
 
@@ -290,8 +290,14 @@ export class AudioEngine {
     osc.frequency.setValueAtTime(440 * Math.pow(2, (midi - 69) / 12), time);
     const peak = this.melodyShape === "triangle" ? 0.028 : 0.038;
     const stepSeconds = 60 / this.bpm / 4;
-    const duration = stepSeconds * 1.65;
-    const attack = Math.min(0.065, stepSeconds * 0.32);
+    // Let selected notes ring across several sixteenth-note slots. The
+    // longer values land periodically so the line has room to breathe
+    // without turning the high-density setting into an undifferentiated wash.
+    const durationSteps = position % 8 === 0 ? 3.6
+      : position % 4 === 0 ? 2.5
+        : 1.55;
+    const duration = stepSeconds * durationSteps;
+    const attack = Math.min(0.085, stepSeconds * 0.38);
     const releaseStart = duration - Math.min(0.14, stepSeconds * 0.55);
     amp.gain.setValueAtTime(0.0001, time);
     amp.gain.exponentialRampToValueAtTime(peak, time + attack);

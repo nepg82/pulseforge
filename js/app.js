@@ -2,7 +2,7 @@ import { AudioEngine } from "./audio-engine.js";
 import { PlaybackScheduler } from "./playback.js";
 import { configureMediaSession, setMediaPlaybackState } from "./media-session.js";
 
-const BUILD_STAMP = "261112-1940";
+const BUILD_STAMP = "261112-1502";
 const CACHE_PREFIX = "pulseforge-";
 const $ = id => document.getElementById(id);
 
@@ -67,19 +67,21 @@ async function stop(reason = "user") {
   updateDiagnostics();
 }
 
+const padShapeVolumes = { sine: 30, blend: 25, triangle: 20 };
 $("padShape").addEventListener("change", event => {
   engine.setPadShape(event.target.value);
+  updateStepper("padVolume", padShapeVolumes[event.target.value]);
 });
 $("melodyShape").addEventListener("change", event => {
   engine.setMelodyShape(event.target.value);
 });
 const stepperValues = {
-  padVolume: 100,
-  melodyVolume: 100,
-  melodyDensity: 50,
-  kickLevel: 65,
-  snareLevel: 45,
-  hatLevel: 22,
+  padVolume: 25,
+  melodyVolume: 115,
+  melodyDensity: 80,
+  kickLevel: 15,
+  snareLevel: 35,
+  hatLevel: 12,
   bpm: 60
 };
 const stepperBounds = {
