@@ -201,23 +201,36 @@ export class AudioEngine {
 
   scheduleDrumStep(step, time) {
     if (!this.context || !this.filter || this.yielded) return;
-    // The pad scheduler stays at its existing rate. Drums use every other
-    // scheduler step, giving them a 0.5-second beat interval (60 BPM).
-    if (step % 2 !== 0) return;
-    const index = (step / 2) % 16;
     const levels = this.drumLevels;
     const gain = 3.1;
 
-    // Same two-bar pattern, stretched to half the previous drum tempo.
-    if ([0, 4, 8, 12].includes(index) && levels.kick > 0) {
-      this.scheduleKick(time, levels.kick * gain, index === 0 || index === 8 ? 1 : 0.88);
+    // The pad phrase is four seconds long. Four scheduler ticks per beat
+    // therefore gives the drums a true 60 BPM quarter-note pulse.
+    const position = step % 16;
+
+    // Main kick on beats 1 and 3, with a restrained anticipation before beat 4.
+    if ([0, 8].includes(position) && levels.kick > 0) {
+      this.scheduleKick(time, levels.kick * gain, position === 0 ? 1 : 0.90);
+    } else if (position === 11 && levels.kick > 0) {
+      this.scheduleKick(time, levels.kick * gain, 0.34);
     }
-    if ([2, 6, 10, 14].includes(index) && levels.snare > 0) {
+
+    // Snare on beats 2 and 4; a quiet ghost note adds a little movement.
+    if ([4, 12].includes(position) && levels.snare > 0) {
       this.scheduleSnare(time, levels.snare * gain, 0.82);
+    } else if (position === 15 && levels.snare > 0) {
+      this.scheduleSnare(time, levels.snare * gain, 0.20);
     }
-    if (levels.hat > 0) {
-      const accent = index % 4 === 0 ? 0.72 : (index % 2 === 0 ? 0.48 : 0.30);
+
+    // Eighth-note hats, with softer offbeat accents for a relaxed shuffle of energy.
+    if (levels.hat > 0 && position % 2 === 0) {
+      const beat = position / 4;
+      const accent = position % 4 === 0
+        ? (beat === 0 ? 0.72 : 0.56)
+        : 0.34;
       this.scheduleHat(time, levels.hat * gain, accent);
+    } else if (levels.hat > 0 && [3, 7, 11, 15].includes(position)) {
+      this.scheduleHat(time, levels.hat * gain, 0.16);
     }
   }
 
@@ -225,8 +238,8 @@ export class AudioEngine {
     const osc = this.context.createOscillator();
     const amp = this.context.createGain();
     osc.type = "sine";
-    osc.frequency.setValueAtTime(118, time);
-    osc.frequency.exponentialRampToValueAtTime(46, time + 0.17);
+    osc.frequency.setValueAtTime(148, time);
+    osc.frequency.exponentialRampToValueAtTime(68, time + 0.17);
     amp.gain.setValueAtTime(0.0001, time);
     amp.gain.exponentialRampToValueAtTime(0.28 * level * velocity, time + 0.006);
     amp.gain.exponentialRampToValueAtTime(0.0001, time + 0.30);
