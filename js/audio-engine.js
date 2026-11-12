@@ -200,19 +200,23 @@ export class AudioEngine {
 
   scheduleDrumStep(step, time) {
     if (!this.context || !this.filter || this.yielded) return;
-    const index = step % 16;
+    // The pad scheduler stays at its existing rate. Drums use every other
+    // scheduler step, giving them a 0.5-second beat interval (60 BPM).
+    if (step % 2 !== 0) return;
+    const index = (step / 2) % 16;
     const levels = this.drumLevels;
+    const gain = 1.75;
 
-    // A relaxed two-bar backbeat at the current 120 BPM scheduler tempo.
+    // Same two-bar pattern, stretched to half the previous drum tempo.
     if ([0, 4, 8, 12].includes(index) && levels.kick > 0) {
-      this.scheduleKick(time, levels.kick, index === 0 || index === 8 ? 1 : 0.88);
+      this.scheduleKick(time, levels.kick * gain, index === 0 || index === 8 ? 1 : 0.88);
     }
     if ([2, 6, 10, 14].includes(index) && levels.snare > 0) {
-      this.scheduleSnare(time, levels.snare, 0.82);
+      this.scheduleSnare(time, levels.snare * gain, 0.82);
     }
     if (levels.hat > 0) {
       const accent = index % 4 === 0 ? 0.72 : (index % 2 === 0 ? 0.48 : 0.30);
-      this.scheduleHat(time, levels.hat, accent);
+      this.scheduleHat(time, levels.hat * gain, accent);
     }
   }
 

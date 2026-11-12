@@ -35,3 +35,8 @@ When changing the offline app shell, increment `CACHE_NAME` in `sw.js` (currentl
 - Added a relaxed two-bar backbeat with independent level controls and an on/off switch.
 - Pad progression and playback infrastructure remain unchanged.
 - Event logging remains disabled.
+
+
+### 0.3.1
+- Drum step interval doubled to 0.5 seconds (60 BPM); pad timing is unchanged.
+- Drum voice amplitudes increased to 175% of the previous values.
